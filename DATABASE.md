@@ -16,6 +16,8 @@ User 包含唯一 `handle`、`role`、`publishing_policy`、`status`、`password
 
 迁移位于 `drizzle/`，由 Drizzle Kit 从 `db/schema.ts` 生成。部署时先运行 `npm run db:migrate`，成功后再切换应用版本。禁止在生产启动过程中自动生成迁移。
 
+`0002_phase3_community_media.sql` 新增可选 GitHub/个人网站字段、评论父级外键，以及文章、成员、分类和标签的 PostgreSQL GIN 搜索索引。`post_likes` 与 `bookmarks` 的复合主键保证幂等。
+
 ## Seed and test data
 
 `npm run db:seed` 可重复执行，只在 Owner 不存在时创建，并同步默认分类。Owner 初始化需要 `SEED_OWNER_HANDLE`、`SEED_OWNER_DISPLAY_NAME` 和运行环境提供的 `SEED_OWNER_PASSWORD`，不会覆盖现有 Owner 密码。测试使用隔离的 `MemoryRepository` 数据工厂，不包含真实密码或个人数据。

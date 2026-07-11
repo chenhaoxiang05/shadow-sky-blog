@@ -15,6 +15,13 @@
       "when": 1783793481723,
       "tag": "0001_invitation-handle-auth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783795380944,
+      "tag": "0002_phase3_community_media",
+      "breakpoints": true
     }
   ]
 }

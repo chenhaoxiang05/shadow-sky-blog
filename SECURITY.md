@@ -13,6 +13,9 @@
 - Web API 永远不能创建或分配 Owner。Owner 可管理除自己和其他 Owner 外的账户并分配到 Admin；Admin 只能管理和分配 Member、Contributor、Author、Editor。
 - 邀请、用户更新、邀请作废和密码重置共用目标角色授权规则；越权尝试记录为 `SECURITY_AUTHORIZATION_DENIED`，客户端只收到通用 403。
 - Markdown 经过 allowlist 清理；外链添加 `noopener noreferrer nofollow`，图片仅允许 HTTPS。
+- 评论移除全部 HTML 标签、继承文章可见性并按用户执行一分钟窗口限流。
+- 图片仅接受通过文件签名识别的 PNG/JPEG/WebP/GIF，拒绝 SVG、HTML、脚本和可执行内容；随机存储键、大小限制、路径约束及 `nosniff` 防止覆盖与类型混淆。
+- 搜索、收藏列表、评论、点赞和收藏写入都会重新执行文章可见性规则。
 - 用户、文章、评论软删除；关键安全和业务操作写审计日志。
 - 响应不返回密码哈希、Session Token、数据库地址或堆栈。
 

@@ -7,7 +7,7 @@
 3. `db/`: PostgreSQL Schema、延迟连接与 Repository 实现。
 4. `scripts/`: 迁移和无固定凭据的幂等种子入口。
 
-`AuthService` 和 `PostService` 依赖 `Repository` 接口，因此测试可使用内存实现，Azure 迁移不会改变领域规则。
+`AuthService`、`PostService` 和 `CommunityService` 依赖 `Repository` 接口，因此测试可使用内存实现，Azure 迁移不会改变领域规则。
 
 ## Request flow
 
@@ -27,4 +27,4 @@
 
 ## Portability
 
-Sites 的 `.openai/hosting.json` 只保存预览项目 ID，不保存数据库或对象存储绑定。正式运行依赖标准 PostgreSQL URL、HTTP Cookie 和环境变量。未来 Blob 与搜索实现通过适配器注入；当前和近期版本不包含邮件或通知提供方。
+Sites 的 `.openai/hosting.json` 只保存预览项目 ID，不保存数据库或对象存储绑定。正式运行依赖标准 PostgreSQL URL、HTTP Cookie 和环境变量。`PostgresSearchProvider` 使用 `websearch_to_tsquery` 与 GIN 索引；`LocalStorageProvider` 是当前本地/测试适配器，可替换为 Azure Blob 而不改变媒体授权和文件验证。当前和近期版本不包含邮件或通知提供方。
