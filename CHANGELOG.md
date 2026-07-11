@@ -9,6 +9,8 @@
 - 新增 `mustChangePassword`、Owner/Admin 人工重置普通用户密码、旧 Session 撤销和强制改密。
 - Owner seed 不再需要邮箱；新增服务器维护密码重置命令。
 - 明确移除邮件通知、邮箱验证、邮件找回密码和 Phase 3 通知中心范围。
+- 修复角色层级授权：任何 Web API 均不能创建或分配 Owner，Admin 只能管理 Editor 及以下角色，Owner 不能管理自己或其他 Owner。
+- 越权邀请、角色变更、状态变更、邀请作废和密码重置会写入失败安全审计。
 
 ## 0.2.0-phase2 — 2026-07-12
 

@@ -10,13 +10,15 @@
 - 双提交 CSRF Token、严格同源校验和 SameSite=Strict CSRF Cookie。
 - 登录失败按账户标识 + 隐私化 IP 哈希限流，返回通用错误。
 - 所有角色、publishingPolicy、authorId、reviewedBy 和状态转换均由服务端决定。
+- Web API 永远不能创建或分配 Owner。Owner 可管理除自己和其他 Owner 外的账户并分配到 Admin；Admin 只能管理和分配 Member、Contributor、Author、Editor。
+- 邀请、用户更新、邀请作废和密码重置共用目标角色授权规则；越权尝试记录为 `SECURITY_AUTHORIZATION_DENIED`，客户端只收到通用 403。
 - Markdown 经过 allowlist 清理；外链添加 `noopener noreferrer nofollow`，图片仅允许 HTTPS。
 - 用户、文章、评论软删除；关键安全和业务操作写审计日志。
 - 响应不返回密码哈希、Session Token、数据库地址或堆栈。
 
 ## Known dependency advisory
 
-当前 `npm audit --omit=dev` 报告 Next.js 间接依赖的 PostCSS 中等级告警。自动 `--force` 修复会把 Next.js 破坏性降级到不兼容版本，因此未执行。升级到包含修复且与 Vinext 兼容的 Next.js 版本后应重新验证并移除此记录。
+当前依赖审计仍包含 Vinext/Cloudflare/Vite/Next.js/Drizzle 工具链告警。未使用 `--force` 或破坏性版本替换；升级必须在兼容性分支重新运行全部质量门槛。
 
 ## Operational requirements
 

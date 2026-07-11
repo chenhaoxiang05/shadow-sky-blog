@@ -10,6 +10,7 @@ export interface Repository {
   listUsers(): Promise<Array<Omit<UserRecord, "passwordHash">>>;
   acceptInvitation(input: { tokenHash: string; passwordHash: string; handle: string; displayName: string; now: Date }): Promise<UserRecord | null>;
   createInvitation(input: { tokenHash: string; role: Exclude<Role, "VISITOR">; publishingPolicy: PublishingPolicy; invitedBy: string; note?: string | null; expiresAt: Date }): Promise<InvitationRecord>;
+  findInvitationById(id: string): Promise<InvitationRecord | null>;
   listInvitations(): Promise<InvitationRecord[]>;
   revokeInvitation(id: string, now: Date): Promise<boolean>;
   updateUserAccess(id: string, changes: { role?: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; status?: UserStatus }, now: Date): Promise<UserRecord | null>;

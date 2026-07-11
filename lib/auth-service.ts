@@ -1,4 +1,4 @@
-import { canChangeRoleOrPolicy, canManageUsers, hasRole } from "./authorization";
+import { canAssignRole, canCreateInvitationForRole, canManageTarget, canResetPassword, hasRole } from "./authorization";
 import { defaultPublishingPolicy, DomainError, type Actor, type PublishingPolicy, type Role, type UserStatus } from "./domain";
 import type { Repository } from "./repository";
 import { hashPassword, hashPrivacyValue, hashToken, opaqueToken, verifyPassword } from "./security";
@@ -56,7 +56,7 @@ export class AuthService {
   }
 
   async createInvitation(actor: Actor, input: { role: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; expiresAt?: Date; expiresInHours?: number; note?: string | null; requestId: string }, now = new Date()) {
-    if (!canManageUsers(actor)) throw new DomainError("FORBIDDEN", "权限不足", 403);
+    if (!canCreateInvitationForRole(actor, input.role)) await this.deny(actor, "CREATE_INVITATION", "INVITATION", undefined, input.requestId, { requestedRole: input.role });
     const publishingPolicy = input.publishingPolicy ?? defaultPublishingPolicy(input.role);
     const expiresAt = input.expiresAt ?? new Date(now.getTime() + (input.expiresInHours ?? 72) * 3_600_000);
     if (expiresAt <= now) throw new DomainError("INVALID_INPUT", "邀请过期时间必须晚于当前时间", 400);
@@ -66,8 +66,9 @@ export class AuthService {
   }
 
   async updateUserAccess(actor: Actor, targetId: string, changes: { role?: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; status?: UserStatus }, requestId: string, now = new Date()) {
-    if (!canChangeRoleOrPolicy(actor, targetId)) throw new DomainError("FORBIDDEN", "只有 Owner 或 Admin 可以修改其他用户的访问权限", 403);
     const before = await this.repo.findUserById(targetId); if (!before) throw new DomainError("NOT_FOUND", "用户不存在", 404);
+    if (!canManageTarget(actor, before)) await this.deny(actor, "UPDATE_USER_ACCESS", "USER", targetId, requestId, { targetRole: before.role });
+    if (changes.role && !canAssignRole(actor, changes.role)) await this.deny(actor, "ASSIGN_ROLE", "USER", targetId, requestId, { targetRole: before.role, requestedRole: changes.role });
     const updated = await this.repo.updateUserAccess(targetId, changes, now); if (!updated) throw new DomainError("NOT_FOUND", "用户不存在", 404);
     if (changes.role && changes.role !== before.role) await this.repo.audit({ actorId: actor.userId, action: "USER_ROLE_CHANGED", targetType: "USER", targetId, requestId, metadata: { from: before.role, to: changes.role } });
     if (changes.publishingPolicy && changes.publishingPolicy !== before.publishingPolicy) await this.repo.audit({ actorId: actor.userId, action: "PUBLISHING_POLICY_CHANGED", targetType: "USER", targetId, requestId, metadata: { from: before.publishingPolicy, to: changes.publishingPolicy } });
@@ -82,16 +83,28 @@ export class AuthService {
   }
 
   async resetUserPassword(actor: Actor, targetId: string, requestId: string, requestedTemporaryPassword?: string, now = new Date()) {
-    if (!canManageUsers(actor)) throw new DomainError("FORBIDDEN", "只有 Owner 或 Admin 可以重置密码", 403);
-    if (actor.userId === targetId) throw new DomainError("FORBIDDEN", "请使用修改密码功能更新自己的密码", 403);
     const target = await this.repo.findUserById(targetId);
     if (!target) throw new DomainError("NOT_FOUND", "用户不存在", 404);
-    if (target.role === "OWNER") throw new DomainError("FORBIDDEN", "Owner 密码只能通过服务器维护命令重置", 403);
+    if (!canResetPassword(actor, target)) await this.deny(actor, "RESET_PASSWORD", "USER", targetId, requestId, { targetRole: target.role });
     const temporaryPassword = requestedTemporaryPassword || opaqueToken(12);
     await this.repo.updatePassword(target.id, await hashPassword(temporaryPassword, this.pepper), true, now);
     await this.repo.revokeAllUserSessions(target.id, now);
     await this.repo.audit({ actorId: actor.userId, action: "ADMIN_PASSWORD_RESET", targetType: "USER", targetId: target.id, requestId });
     return { temporaryPassword };
+  }
+
+  async revokeInvitation(actor: Actor, invitationId: string, requestId: string, now = new Date()) {
+    const invitation = await this.repo.findInvitationById(invitationId);
+    if (!invitation) throw new DomainError("NOT_FOUND", "邀请不存在", 404);
+    if (!canCreateInvitationForRole(actor, invitation.role)) await this.deny(actor, "REVOKE_INVITATION", "INVITATION", invitationId, requestId, { invitedRole: invitation.role });
+    const revoked = await this.repo.revokeInvitation(invitationId, now);
+    if (revoked) await this.repo.audit({ actorId: actor.userId, action: "INVITATION_REVOKED", targetType: "INVITATION", targetId: invitationId, requestId });
+    return revoked;
+  }
+
+  private async deny(actor: Actor, operation: string, targetType: "USER" | "INVITATION", targetId: string | undefined, requestId: string, metadata: Record<string, unknown>): Promise<never> {
+    await this.repo.audit({ actorId: actor.userId, action: "SECURITY_AUTHORIZATION_DENIED", targetType, targetId, requestId, outcome: "FAILURE", reason: "ROLE_HIERARCHY_VIOLATION", metadata: { operation, actorRole: actor.role, ...metadata } });
+    throw new DomainError("FORBIDDEN", "权限不足", 403);
   }
 }
 

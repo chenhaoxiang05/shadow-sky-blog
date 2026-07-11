@@ -54,7 +54,9 @@ Owner 密码只能通过服务器维护命令 `npm run owner:reset-password` 重
 
 ## 角色与 publishingPolicy
 
-角色决定可执行的业务能力。Member 只读和评论；Contributor/Author 可创作；Editor 可审核他人文章；Admin 可管理用户、角色与发布策略；Owner 还可管理站点设置。
+角色决定可执行的业务能力。Member 只读和评论；Contributor/Author 可创作；Editor 可审核他人文章；Admin 只能管理 Member、Contributor、Author、Editor；Owner 可额外创建和管理 Admin 及站点设置。
+
+Owner 只能由服务器 seed 创建，不能通过邀请或用户管理 API 创建、分配或降级。Owner 也不能通过普通用户 API 修改或禁用自己；Owner 密码继续仅允许服务器维护命令重置。
 
 `DIRECT_PUBLISH` 只允许用户发布自己的文章，不授予审核或管理他人文章的权限。只有 Owner/Admin 能修改发布策略，且修改必须写审计日志。
 

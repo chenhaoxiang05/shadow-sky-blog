@@ -24,6 +24,7 @@ export class PostgresRepository implements Repository {
   }
 
   async createInvitation(input: { tokenHash: string; role: Exclude<Role, "VISITOR">; publishingPolicy: PublishingPolicy; invitedBy: string; note?: string | null; expiresAt: Date }) { const [row] = await this.db.insert(invitations).values(input).returning(); return inviteShape(row); }
+  async findInvitationById(id: string) { const [row] = await this.db.select().from(invitations).where(eq(invitations.id, id)).limit(1); return row ? inviteShape(row) : null; }
   async listInvitations() { const rows = await this.db.select().from(invitations).orderBy(desc(invitations.createdAt)).limit(100); return rows.map(inviteShape); }
   async revokeInvitation(id: string, now: Date) { const rows = await this.db.update(invitations).set({ revokedAt: now }).where(and(eq(invitations.id, id), isNull(invitations.acceptedAt), isNull(invitations.revokedAt))).returning({ id: invitations.id }); return rows.length === 1; }
   async updateUserAccess(id: string, changes: { role?: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; status?: UserStatus }, now: Date) { const [row] = await this.db.update(users).set({ ...changes, updatedAt: now }).where(and(eq(users.id, id), isNull(users.deletedAt))).returning(); return row ? userShape(row) : null; }
