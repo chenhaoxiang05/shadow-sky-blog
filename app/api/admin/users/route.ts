@@ -1,0 +1,5 @@
+import { z } from "zod";
+import { currentAuth, errorResponse, json, mutationAuth, requestId, services } from "@/lib/http";
+const schema = z.object({ id: z.uuid(), role: z.enum(["MEMBER", "CONTRIBUTOR", "AUTHOR", "EDITOR", "ADMIN", "OWNER"]).optional(), publishingPolicy: z.enum(["REVIEW_REQUIRED", "DIRECT_PUBLISH"]).optional(), status: z.enum(["ACTIVE", "DISABLED"]).optional() }).refine((value) => value.role || value.publishingPolicy || value.status, "没有需要更新的字段");
+export async function GET(request: Request) { try { const { actor } = await currentAuth(request); if (!['OWNER','ADMIN'].includes(actor.role)) return json({ error: { code: "FORBIDDEN", message: "权限不足" } }, { status: 403 }); const { repo } = services(); return json({ users: await repo.listUsers() }); } catch (error) { return errorResponse(error); } }
+export async function PATCH(request: Request) { try { const { actor } = await mutationAuth(request); const { id, ...changes } = schema.parse(await request.json()); const { auth } = services(); return json({ user: await auth.updateUserAccess(actor, id, changes, requestId(request)) }); } catch (error) { return errorResponse(error); } }

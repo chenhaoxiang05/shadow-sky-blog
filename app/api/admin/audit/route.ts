@@ -1,0 +1,2 @@
+import { currentAuth, errorResponse, json, services } from "@/lib/http";
+export async function GET(request: Request) { try { const { actor } = await currentAuth(request); if (!['OWNER','ADMIN'].includes(actor.role)) return json({ error: { code: "FORBIDDEN", message: "权限不足" } }, { status: 403 }); const limit = Number(new URL(request.url).searchParams.get("limit") ?? 100); const { repo } = services(); return json({ events: await repo.listAudit(limit) }); } catch (error) { return errorResponse(error); } }

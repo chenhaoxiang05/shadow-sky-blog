@@ -1,31 +1,23 @@
-/** Portable, server-side authorization policy. UI visibility is never authoritative. */
-export const roles = ["VISITOR", "MEMBER", "CONTRIBUTOR", "AUTHOR", "EDITOR", "ADMIN", "OWNER"] as const;
-export type Role = (typeof roles)[number];
-export type PostStatus = "DRAFT" | "IN_REVIEW" | "PUBLISHED" | "HIDDEN";
-export type Visibility = "PUBLIC" | "MEMBERS" | "PRIVATE";
+import type { Actor, PostRecord, Role } from "./domain";
 
-const level: Record<Role, number> = {
-  VISITOR: 0, MEMBER: 1, CONTRIBUTOR: 2, AUTHOR: 3, EDITOR: 4, ADMIN: 5, OWNER: 6,
-};
+const level: Record<Role, number> = { VISITOR: 0, MEMBER: 1, CONTRIBUTOR: 2, AUTHOR: 3, EDITOR: 4, ADMIN: 5, OWNER: 6 };
+export const isActive = (actor: Actor) => actor.status === "ACTIVE";
+export const hasRole = (actor: Actor, minimum: Role) => isActive(actor) && level[actor.role] >= level[minimum];
+export const canCreatePost = (actor: Actor) => hasRole(actor, "CONTRIBUTOR");
+export const canReviewPosts = (actor: Actor) => hasRole(actor, "EDITOR");
+export const canManageUsers = (actor: Actor) => hasRole(actor, "ADMIN");
+export const canManageSite = (actor: Actor) => hasRole(actor, "OWNER");
+export const canChangeRoleOrPolicy = (actor: Actor, targetUserId: string) => canManageUsers(actor) && actor.userId !== targetUserId;
 
-export type Actor = { userId?: string; role: Role; disabled?: boolean };
-export type PostResource = { authorId: string; status: PostStatus; visibility: Visibility };
-
-export function canReadPost(actor: Actor, post: PostResource) {
-  if (post.status === "HIDDEN" && level[actor.role] < level.ADMIN) return post.authorId === actor.userId;
-  if (post.visibility === "PUBLIC") return post.status === "PUBLISHED" || post.authorId === actor.userId || level[actor.role] >= level.EDITOR;
-  if (post.visibility === "MEMBERS") return level[actor.role] >= level.MEMBER && (post.status === "PUBLISHED" || post.authorId === actor.userId || level[actor.role] >= level.EDITOR);
-  return post.authorId === actor.userId || level[actor.role] >= level.ADMIN;
+export function canReadPost(actor: Actor, post: PostRecord) {
+  if (post.deletedAt || post.status === "DELETED") return hasRole(actor, "ADMIN") || actor.userId === post.authorId;
+  if (post.status === "HIDDEN") return hasRole(actor, "ADMIN") || actor.userId === post.authorId;
+  if (post.visibility === "PRIVATE") return hasRole(actor, "ADMIN") || actor.userId === post.authorId;
+  if (post.visibility === "MEMBERS_ONLY" && !hasRole(actor, "MEMBER")) return false;
+  return post.status === "PUBLISHED" || actor.userId === post.authorId || canReviewPosts(actor);
 }
 
-export function canCreatePost(actor: Actor) { return !actor.disabled && level[actor.role] >= level.CONTRIBUTOR; }
-export function canPublishOwnPost(actor: Actor) { return !actor.disabled && level[actor.role] >= level.AUTHOR; }
-export function canSubmitForReview(actor: Actor, post: PostResource) { return !actor.disabled && actor.userId === post.authorId && level[actor.role] >= level.CONTRIBUTOR; }
-export function canReviewPosts(actor: Actor) { return !actor.disabled && level[actor.role] >= level.EDITOR; }
-export function canModerateComments(actor: Actor) { return !actor.disabled && level[actor.role] >= level.ADMIN; }
-export function canManageUsers(actor: Actor) { return !actor.disabled && level[actor.role] >= level.ADMIN; }
-export function canManageSite(actor: Actor) { return !actor.disabled && actor.role === "OWNER"; }
-
-export function requirePermission(allowed: boolean): asserts allowed {
-  if (!allowed) throw new Error("FORBIDDEN");
-}
+export const canEditPost = (actor: Actor, post: PostRecord) => isActive(actor) && (actor.userId === post.authorId || hasRole(actor, "ADMIN"));
+export const canDirectPublish = (actor: Actor, post: PostRecord) => isActive(actor) && actor.publishingPolicy === "DIRECT_PUBLISH" && actor.userId === post.authorId;
+export const canReviewPost = (actor: Actor, post: PostRecord) => canReviewPosts(actor) && actor.userId !== post.authorId && post.status === "PENDING_REVIEW";
+export const canHidePost = (actor: Actor, post: PostRecord) => hasRole(actor, "EDITOR") || actor.userId === post.authorId;

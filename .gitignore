@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/.nyc_output/
 
 # next.js
 /.next/
@@ -20,7 +21,13 @@
 
 # misc
 .DS_Store
+Thumbs.db
+.idea/
+.vscode/
 *.pem
+*.key
+*.pfx
+*.p12
 
 # debug
 npm-debug.log*
@@ -39,7 +46,13 @@ yarn-error.log*
 next-env.d.ts
 *.tsbuildinfo
 work-dev.*.log
+*.log
+*.sqlite
+*.sqlite3
+*.db
 /dist/
 /.wrangler/
 /outputs/
 /work/
+/uploads/
+/public/uploads/

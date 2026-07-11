@@ -1,5 +1,13 @@
 {
   "version": "7",
-  "dialect": "sqlite",
-  "entries": []
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1783789632764,
+      "tag": "0000_condemned_monster_badoon",
+      "breakpoints": true
+    }
+  ]
 }
