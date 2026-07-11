@@ -4,7 +4,8 @@
 
 ## Phase 2 功能
 
-- 邀请制注册；用户名或邮箱 + 密码登录；安全 Session、登出、修改密码、账户禁用与资料维护。
+- 纯邀请码注册；用户名 handle + 密码登录；安全 Session、登出、修改密码、账户禁用与资料维护。
+- 不使用邮箱验证、邮件通知或自动找回密码。忘记密码由 Owner/Admin 人工重置，用户随后必须修改临时密码。
 - Owner、Admin、Editor、Author、Contributor、Member、Visitor 权限模型。
 - 每用户独立 `publishingPolicy`：`REVIEW_REQUIRED` 或 `DIRECT_PUBLISH`，不与角色硬编码。
 - 文章草稿、Markdown 安全渲染、乐观并发 revision、提交审核、批准、退回、重新提交、直接发布、隐藏、软删除和恢复。
@@ -29,7 +30,9 @@ React 19、Next.js 风格 App Router、TypeScript、Vinext、PostgreSQL、Drizzl
 
 ## 环境变量
 
-关键变量包括 `DATABASE_URL`、`SESSION_SECRET`、`PASSWORD_PEPPER`、`APP_URL`、`DATABASE_POOL_SIZE` 和 `AUDIT_RETENTION_DAYS`。种子命令仅从 `SEED_OWNER_PASSWORD` 读取初始密码，源码和迁移中不包含固定密码。
+关键变量包括 `DATABASE_URL`、`SESSION_SECRET`、`PASSWORD_PEPPER`、`APP_URL`、`DATABASE_POOL_SIZE` 和 `AUDIT_RETENTION_DAYS`。Owner 初始化只使用 `SEED_OWNER_HANDLE`、`SEED_OWNER_DISPLAY_NAME` 和 `SEED_OWNER_PASSWORD`；源码和迁移中不包含固定密码。
+
+Owner 密码只能通过服务器维护命令 `npm run owner:reset-password` 重置，并从运行环境读取 `OWNER_RESET_PASSWORD`。
 
 ## 数据库
 
@@ -51,7 +54,9 @@ React 19、Next.js 风格 App Router、TypeScript、Vinext、PostgreSQL、Drizzl
 
 ## 角色与 publishingPolicy
 
-角色决定可执行的业务能力。Member 只读和评论；Contributor/Author 可创作；Editor 可审核他人文章；Admin 可管理用户、角色与发布策略；Owner 还可管理站点设置。
+角色决定可执行的业务能力。Member 只读和评论；Contributor/Author 可创作；Editor 可审核他人文章；Admin 只能管理 Member、Contributor、Author、Editor；Owner 可额外创建和管理 Admin 及站点设置。
+
+Owner 只能由服务器 seed 创建，不能通过邀请或用户管理 API 创建、分配或降级。Owner 也不能通过普通用户 API 修改或禁用自己；Owner 密码继续仅允许服务器维护命令重置。
 
 `DIRECT_PUBLISH` 只允许用户发布自己的文章，不授予审核或管理他人文章的权限。只有 Owner/Admin 能修改发布策略，且修改必须写审计日志。
 

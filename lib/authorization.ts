@@ -1,4 +1,4 @@
-import type { Actor, PostRecord, Role } from "./domain";
+import type { Actor, PostRecord, Role, UserRecord } from "./domain";
 
 const level: Record<Role, number> = { VISITOR: 0, MEMBER: 1, CONTRIBUTOR: 2, AUTHOR: 3, EDITOR: 4, ADMIN: 5, OWNER: 6 };
 export const isActive = (actor: Actor) => actor.status === "ACTIVE";
@@ -7,7 +7,28 @@ export const canCreatePost = (actor: Actor) => hasRole(actor, "CONTRIBUTOR");
 export const canReviewPosts = (actor: Actor) => hasRole(actor, "EDITOR");
 export const canManageUsers = (actor: Actor) => hasRole(actor, "ADMIN");
 export const canManageSite = (actor: Actor) => hasRole(actor, "OWNER");
-export const canChangeRoleOrPolicy = (actor: Actor, targetUserId: string) => canManageUsers(actor) && actor.userId !== targetUserId;
+
+const adminAssignableRoles: ReadonlySet<Role> = new Set(["MEMBER", "CONTRIBUTOR", "AUTHOR", "EDITOR"]);
+const ownerAssignableRoles: ReadonlySet<Role> = new Set([...adminAssignableRoles, "ADMIN"]);
+type ManagedTarget = Pick<UserRecord, "id" | "role">;
+
+export function canManageTarget(actor: Actor, target: ManagedTarget) {
+  if (!isActive(actor) || !actor.userId || actor.userId === target.id || target.role === "OWNER") return false;
+  if (actor.role === "OWNER") return true;
+  return actor.role === "ADMIN" && adminAssignableRoles.has(target.role);
+}
+
+export function canAssignRole(actor: Actor, targetRole: Role) {
+  if (!isActive(actor) || targetRole === "VISITOR" || targetRole === "OWNER") return false;
+  if (actor.role === "OWNER") return ownerAssignableRoles.has(targetRole);
+  return actor.role === "ADMIN" && adminAssignableRoles.has(targetRole);
+}
+
+export const canCreateInvitationForRole = (actor: Actor, invitedRole: Role) => canAssignRole(actor, invitedRole);
+
+export function canResetPassword(actor: Actor, target: ManagedTarget) {
+  return canManageTarget(actor, target);
+}
 
 export function canReadPost(actor: Actor, post: PostRecord) {
   if (post.deletedAt || post.status === "DELETED") return hasRole(actor, "ADMIN") || actor.userId === post.authorId;

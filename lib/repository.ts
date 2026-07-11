@@ -9,11 +9,13 @@ export interface Repository {
   findUserById(id: string): Promise<UserRecord | null>;
   listUsers(): Promise<Array<Omit<UserRecord, "passwordHash">>>;
   acceptInvitation(input: { tokenHash: string; passwordHash: string; handle: string; displayName: string; now: Date }): Promise<UserRecord | null>;
-  createInvitation(input: { email: string; tokenHash: string; role: Exclude<Role, "VISITOR">; publishingPolicy: PublishingPolicy; invitedBy: string; expiresAt: Date }): Promise<InvitationRecord>;
+  createInvitation(input: { tokenHash: string; role: Exclude<Role, "VISITOR">; publishingPolicy: PublishingPolicy; invitedBy: string; note?: string | null; expiresAt: Date }): Promise<InvitationRecord>;
+  findInvitationById(id: string): Promise<InvitationRecord | null>;
+  listInvitations(): Promise<InvitationRecord[]>;
   revokeInvitation(id: string, now: Date): Promise<boolean>;
   updateUserAccess(id: string, changes: { role?: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; status?: UserStatus }, now: Date): Promise<UserRecord | null>;
   updateUserProfile(id: string, changes: { displayName?: string; bio?: string | null; avatarKey?: string | null }, now: Date): Promise<UserRecord | null>;
-  updatePassword(id: string, passwordHash: string, now: Date): Promise<void>;
+  updatePassword(id: string, passwordHash: string, mustChangePassword: boolean, now: Date): Promise<void>;
   createSession(input: { userId: string; tokenHash: string; csrfHash: string; expiresAt: Date; ipHash?: string; userAgent?: string; now: Date }): Promise<SessionRecord>;
   findSessionByTokenHash(tokenHash: string): Promise<SessionWithUser | null>;
   revokeSessionByTokenHash(tokenHash: string, now: Date): Promise<void>;
