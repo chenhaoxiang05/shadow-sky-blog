@@ -17,7 +17,9 @@
 
 ## Authentication
 
-应用使用不透明 Session Token。数据库只保存带服务器密钥的 Token 哈希。登录成功创建新 Session 并撤销请求携带的旧 Session，避免固定攻击。账户禁用和密码修改会撤销该用户全部 Session。
+应用使用不透明 Session Token。数据库只保存带服务器密钥的 Token 哈希。登录成功创建新 Session 并撤销请求携带的旧 Session，避免固定攻击。账户禁用、管理员重置或密码修改会撤销该用户全部 Session。管理员重置后，`mustChangePassword` 会阻止除修改密码、查看 Session 和登出之外的受保护功能。
+
+注册只接受一次性、不可预测的邀请码。邀请不绑定邮箱；数据库只保存 Token 哈希，Owner/Admin 通过群聊或私聊手动发送一次性链接。
 
 ## Publishing workflow
 
@@ -25,4 +27,4 @@
 
 ## Portability
 
-Sites 的 `.openai/hosting.json` 只保存预览项目 ID，不保存数据库或对象存储绑定。正式运行依赖标准 PostgreSQL URL、HTTP Cookie 和环境变量。未来 Blob、邮件和搜索实现通过适配器注入。
+Sites 的 `.openai/hosting.json` 只保存预览项目 ID，不保存数据库或对象存储绑定。正式运行依赖标准 PostgreSQL URL、HTTP Cookie 和环境变量。未来 Blob 与搜索实现通过适配器注入；当前和近期版本不包含邮件或通知提供方。

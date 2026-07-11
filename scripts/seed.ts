@@ -2,14 +2,14 @@ import { eq } from "drizzle-orm";
 import { categories, closeDb, getDb, users } from "../db";
 import { hashPassword } from "../lib/security";
 
-const email = process.env.SEED_OWNER_EMAIL?.trim().toLowerCase();
 const password = process.env.SEED_OWNER_PASSWORD;
-const handle = process.env.SEED_OWNER_HANDLE?.trim().toLowerCase() ?? "owner";
-if (!email || !password) throw new Error("SEED_OWNER_EMAIL and SEED_OWNER_PASSWORD are required; no password is stored in source control.");
+const handle = process.env.SEED_OWNER_HANDLE?.trim().toLowerCase();
+const displayName = process.env.SEED_OWNER_DISPLAY_NAME?.trim();
+if (!handle || !displayName || !password) throw new Error("SEED_OWNER_HANDLE, SEED_OWNER_DISPLAY_NAME and SEED_OWNER_PASSWORD are required; no password is stored in source control.");
 
 const db = getDb();
-const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-if (!existing) await db.insert(users).values({ email, handle, displayName: process.env.SEED_OWNER_DISPLAY_NAME ?? "Site Owner", passwordHash: await hashPassword(password), role: "OWNER", publishingPolicy: "DIRECT_PUBLISH", status: "ACTIVE", emailVerifiedAt: new Date() });
+const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.role, "OWNER")).limit(1);
+if (!existing) await db.insert(users).values({ handle, displayName, passwordHash: await hashPassword(password), role: "OWNER", publishingPolicy: "DIRECT_PUBLISH", status: "ACTIVE", mustChangePassword: false });
 
 for (const category of [
   { name: "AI Engineering", slug: "ai-engineering" }, { name: "Frontend", slug: "frontend" }, { name: "Backend", slug: "backend" }, { name: "DevOps", slug: "devops" }, { name: "Projects", slug: "projects" }, { name: "Learning", slug: "learning" },

@@ -9,25 +9,26 @@ const inviteShape = (row: typeof invitations.$inferSelect): InvitationRecord => 
 
 export class PostgresRepository implements Repository {
   private db = getDb();
-  async findUserByLogin(login: string) { const [row] = await this.db.select().from(users).where(and(or(eq(users.email, login), eq(users.handle, login)), isNull(users.deletedAt))).limit(1); return row ? userShape(row) : null; }
+  async findUserByLogin(login: string) { const [row] = await this.db.select().from(users).where(and(eq(users.handle, login), isNull(users.deletedAt))).limit(1); return row ? userShape(row) : null; }
   async findUserById(id: string) { const [row] = await this.db.select().from(users).where(and(eq(users.id, id), isNull(users.deletedAt))).limit(1); return row ? userShape(row) : null; }
   async listUsers() { const rows = await this.db.select().from(users).where(isNull(users.deletedAt)).orderBy(desc(users.createdAt)); return rows.map((row) => { const safe: Partial<UserRecord> = userShape(row); delete safe.passwordHash; return safe as Omit<UserRecord, "passwordHash">; }); }
 
   async acceptInvitation(input: { tokenHash: string; passwordHash: string; handle: string; displayName: string; now: Date }) {
     return this.db.transaction(async (tx) => {
-      const [invitation] = await tx.select().from(invitations).where(and(eq(invitations.tokenHash, input.tokenHash), isNull(invitations.acceptedAt), isNull(invitations.revokedAt), gt(invitations.expiresAt, input.now))).limit(1);
+      const [invitation] = await tx.select().from(invitations).where(and(eq(invitations.tokenHash, input.tokenHash), isNull(invitations.acceptedAt), isNull(invitations.revokedAt), gt(invitations.expiresAt, input.now))).limit(1).for("update");
       if (!invitation) return null;
-      const [created] = await tx.insert(users).values({ email: invitation.email, handle: input.handle.trim().toLowerCase(), displayName: input.displayName.trim(), passwordHash: input.passwordHash, role: invitation.role, publishingPolicy: invitation.publishingPolicy, status: "ACTIVE", emailVerifiedAt: input.now }).returning();
+      const [created] = await tx.insert(users).values({ handle: input.handle.trim().toLowerCase(), displayName: input.displayName.trim(), passwordHash: input.passwordHash, role: invitation.role, publishingPolicy: invitation.publishingPolicy, status: "ACTIVE", mustChangePassword: false }).returning();
       await tx.update(invitations).set({ acceptedAt: input.now }).where(and(eq(invitations.id, invitation.id), isNull(invitations.acceptedAt)));
       return userShape(created);
     });
   }
 
-  async createInvitation(input: { email: string; tokenHash: string; role: Exclude<Role, "VISITOR">; publishingPolicy: PublishingPolicy; invitedBy: string; expiresAt: Date }) { const [row] = await this.db.insert(invitations).values(input).returning(); return inviteShape(row); }
+  async createInvitation(input: { tokenHash: string; role: Exclude<Role, "VISITOR">; publishingPolicy: PublishingPolicy; invitedBy: string; note?: string | null; expiresAt: Date }) { const [row] = await this.db.insert(invitations).values(input).returning(); return inviteShape(row); }
+  async listInvitations() { const rows = await this.db.select().from(invitations).orderBy(desc(invitations.createdAt)).limit(100); return rows.map(inviteShape); }
   async revokeInvitation(id: string, now: Date) { const rows = await this.db.update(invitations).set({ revokedAt: now }).where(and(eq(invitations.id, id), isNull(invitations.acceptedAt), isNull(invitations.revokedAt))).returning({ id: invitations.id }); return rows.length === 1; }
   async updateUserAccess(id: string, changes: { role?: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; status?: UserStatus }, now: Date) { const [row] = await this.db.update(users).set({ ...changes, updatedAt: now }).where(and(eq(users.id, id), isNull(users.deletedAt))).returning(); return row ? userShape(row) : null; }
   async updateUserProfile(id: string, changes: { displayName?: string; bio?: string | null; avatarKey?: string | null }, now: Date) { const [row] = await this.db.update(users).set({ ...changes, updatedAt: now }).where(and(eq(users.id, id), isNull(users.deletedAt))).returning(); return row ? userShape(row) : null; }
-  async updatePassword(id: string, passwordHash: string, now: Date) { await this.db.update(users).set({ passwordHash, passwordChangedAt: now, updatedAt: now }).where(eq(users.id, id)); }
+  async updatePassword(id: string, passwordHash: string, mustChangePassword: boolean, now: Date) { await this.db.update(users).set({ passwordHash, mustChangePassword, passwordChangedAt: now, updatedAt: now }).where(eq(users.id, id)); }
 
   async createSession(input: { userId: string; tokenHash: string; csrfHash: string; expiresAt: Date; ipHash?: string; userAgent?: string; now: Date }) { const [row] = await this.db.insert(sessions).values({ ...input, createdAt: input.now, lastSeenAt: input.now }).returning(); return row as SessionRecord; }
   async findSessionByTokenHash(tokenHash: string): Promise<SessionWithUser | null> { const [row] = await this.db.select({ session: sessions, user: users }).from(sessions).innerJoin(users, eq(users.id, sessions.userId)).where(eq(sessions.tokenHash, tokenHash)).limit(1); return row ? { session: row.session as SessionRecord, user: userShape(row.user) } : null; }

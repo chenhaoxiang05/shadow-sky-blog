@@ -14,14 +14,14 @@ const timestamps = {
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
-  email: text("email").notNull(), handle: text("handle").notNull(), displayName: text("display_name").notNull(), bio: text("bio"), avatarKey: text("avatar_key"),
+  email: text("email"), handle: text("handle").notNull(), displayName: text("display_name").notNull(), bio: text("bio"), avatarKey: text("avatar_key"),
   passwordHash: text("password_hash").notNull(), role: roleEnum("role").default("MEMBER").notNull(), status: userStatusEnum("status").default("ACTIVE").notNull(), publishingPolicy: publishingPolicyEnum("publishing_policy").default("REVIEW_REQUIRED").notNull(),
-  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }), passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }), lastLoginAt: timestamp("last_login_at", { withTimezone: true }), deletedAt: timestamp("deleted_at", { withTimezone: true }), ...timestamps,
+  mustChangePassword: boolean("must_change_password").default(false).notNull(), passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }), lastLoginAt: timestamp("last_login_at", { withTimezone: true }), deletedAt: timestamp("deleted_at", { withTimezone: true }), ...timestamps,
 }, (t) => [uniqueIndex("users_email_uq").on(t.email), uniqueIndex("users_handle_uq").on(t.handle), index("users_status_role_idx").on(t.status, t.role), index("users_deleted_idx").on(t.deletedAt)]);
 
 export const invitations = pgTable("invitations", {
-  id: uuid("id").defaultRandom().primaryKey(), email: text("email").notNull(), tokenHash: text("token_hash").notNull(), role: roleEnum("role").default("MEMBER").notNull(), publishingPolicy: publishingPolicyEnum("publishing_policy").default("REVIEW_REQUIRED").notNull(), invitedBy: uuid("invited_by").notNull().references(() => users.id, { onDelete: "restrict" }), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), acceptedAt: timestamp("accepted_at", { withTimezone: true }), revokedAt: timestamp("revoked_at", { withTimezone: true }), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (t) => [uniqueIndex("invitations_token_hash_uq").on(t.tokenHash), index("invitations_email_state_idx").on(t.email, t.expiresAt, t.revokedAt)]);
+  id: uuid("id").defaultRandom().primaryKey(), tokenHash: text("token_hash").notNull(), role: roleEnum("role").default("MEMBER").notNull(), publishingPolicy: publishingPolicyEnum("publishing_policy").default("REVIEW_REQUIRED").notNull(), invitedBy: uuid("invited_by").notNull().references(() => users.id, { onDelete: "restrict" }), note: text("note"), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), acceptedAt: timestamp("accepted_at", { withTimezone: true }), revokedAt: timestamp("revoked_at", { withTimezone: true }), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [uniqueIndex("invitations_token_hash_uq").on(t.tokenHash), index("invitations_state_idx").on(t.expiresAt, t.acceptedAt, t.revokedAt)]);
 
 export const sessions = pgTable("sessions", {
   id: uuid("id").defaultRandom().primaryKey(), userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), tokenHash: text("token_hash").notNull(), csrfHash: text("csrf_hash").notNull(), ipHash: text("ip_hash"), userAgent: text("user_agent"), lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).defaultNow().notNull(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), revokedAt: timestamp("revoked_at", { withTimezone: true }), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

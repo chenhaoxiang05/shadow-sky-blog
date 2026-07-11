@@ -19,7 +19,7 @@ export class AuthService {
     if (!user || !valid || user.deletedAt || user.status !== "ACTIVE") {
       await this.repo.recordLoginFailure(keyHash, now);
       await this.repo.audit({ action: "LOGIN_FAILURE", targetType: "AUTH", targetId: user?.id, requestId: input.requestId, outcome: "FAILURE", reason: "INVALID_CREDENTIALS_OR_DISABLED" });
-      throw new DomainError("UNAUTHENTICATED", "用户名、邮箱或密码不正确", 401);
+      throw new DomainError("UNAUTHENTICATED", "用户名或密码不正确", 401);
     }
     if (input.oldSessionToken) await this.repo.revokeSessionByTokenHash(hashToken(input.oldSessionToken, this.secret), now);
     const sessionToken = opaqueToken(); const csrfToken = opaqueToken(); const expiresAt = new Date(now.getTime() + SESSION_HOURS * 3_600_000);
@@ -44,17 +44,23 @@ export class AuthService {
 
   async acceptInvitation(input: { token: string; password: string; handle: string; displayName: string; requestId: string; now?: Date }) {
     const now = input.now ?? new Date();
+    const normalizedHandle = input.handle.trim().toLowerCase();
+    if (await this.repo.findUserByLogin(normalizedHandle)) throw new DomainError("CONFLICT", "用户名已被使用", 409);
     const passwordHash = await hashPassword(input.password, this.pepper);
-    const user = await this.repo.acceptInvitation({ tokenHash: hashToken(input.token, this.secret), passwordHash, handle: input.handle, displayName: input.displayName, now });
+    let user: Awaited<ReturnType<Repository["acceptInvitation"]>>;
+    try { user = await this.repo.acceptInvitation({ tokenHash: hashToken(input.token, this.secret), passwordHash, handle: normalizedHandle, displayName: input.displayName, now }); }
+    catch (error) { if ((error as { code?: string }).code === "23505") throw new DomainError("CONFLICT", "用户名已被使用", 409); throw error; }
     if (!user) throw new DomainError("INVALID_INPUT", "邀请无效、已过期或已被使用", 400);
     await this.repo.audit({ actorId: user.id, action: "INVITATION_ACCEPTED", targetType: "INVITATION", targetId: user.id, requestId: input.requestId });
     return withoutPassword(user);
   }
 
-  async createInvitation(actor: Actor, input: { email: string; role: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; expiresInHours?: number; requestId: string }, now = new Date()) {
+  async createInvitation(actor: Actor, input: { role: Exclude<Role, "VISITOR">; publishingPolicy?: PublishingPolicy; expiresAt?: Date; expiresInHours?: number; note?: string | null; requestId: string }, now = new Date()) {
     if (!canManageUsers(actor)) throw new DomainError("FORBIDDEN", "权限不足", 403);
     const publishingPolicy = input.publishingPolicy ?? defaultPublishingPolicy(input.role);
-    const token = opaqueToken(); const invitation = await this.repo.createInvitation({ email: input.email.trim().toLowerCase(), tokenHash: hashToken(token, this.secret), role: input.role, publishingPolicy, invitedBy: actor.userId!, expiresAt: new Date(now.getTime() + (input.expiresInHours ?? 72) * 3_600_000) });
+    const expiresAt = input.expiresAt ?? new Date(now.getTime() + (input.expiresInHours ?? 72) * 3_600_000);
+    if (expiresAt <= now) throw new DomainError("INVALID_INPUT", "邀请过期时间必须晚于当前时间", 400);
+    const token = opaqueToken(); const invitation = await this.repo.createInvitation({ tokenHash: hashToken(token, this.secret), role: input.role, publishingPolicy, invitedBy: actor.userId!, note: input.note?.trim().slice(0, 200) || null, expiresAt });
     await this.repo.audit({ actorId: actor.userId, action: "INVITATION_CREATED", targetType: "INVITATION", targetId: invitation.id, requestId: input.requestId, metadata: { role: input.role, publishingPolicy } });
     return { invitation, token };
   }
@@ -72,7 +78,20 @@ export class AuthService {
   async changePassword(actor: Actor, currentPassword: string, nextPassword: string, requestId: string, now = new Date()) {
     if (!hasRole(actor, "MEMBER")) throw new DomainError("FORBIDDEN", "权限不足", 403);
     const user = await this.repo.findUserById(actor.userId!); if (!user || !(await verifyPassword(user.passwordHash, currentPassword, this.pepper))) throw new DomainError("UNAUTHENTICATED", "当前密码不正确", 401);
-    await this.repo.updatePassword(user.id, await hashPassword(nextPassword, this.pepper), now); await this.repo.revokeAllUserSessions(user.id, now); await this.repo.audit({ actorId: user.id, action: "PASSWORD_CHANGED", targetType: "USER", targetId: user.id, requestId });
+    await this.repo.updatePassword(user.id, await hashPassword(nextPassword, this.pepper), false, now); await this.repo.revokeAllUserSessions(user.id, now); await this.repo.audit({ actorId: user.id, action: "PASSWORD_CHANGED", targetType: "USER", targetId: user.id, requestId });
+  }
+
+  async resetUserPassword(actor: Actor, targetId: string, requestId: string, requestedTemporaryPassword?: string, now = new Date()) {
+    if (!canManageUsers(actor)) throw new DomainError("FORBIDDEN", "只有 Owner 或 Admin 可以重置密码", 403);
+    if (actor.userId === targetId) throw new DomainError("FORBIDDEN", "请使用修改密码功能更新自己的密码", 403);
+    const target = await this.repo.findUserById(targetId);
+    if (!target) throw new DomainError("NOT_FOUND", "用户不存在", 404);
+    if (target.role === "OWNER") throw new DomainError("FORBIDDEN", "Owner 密码只能通过服务器维护命令重置", 403);
+    const temporaryPassword = requestedTemporaryPassword || opaqueToken(12);
+    await this.repo.updatePassword(target.id, await hashPassword(temporaryPassword, this.pepper), true, now);
+    await this.repo.revokeAllUserSessions(target.id, now);
+    await this.repo.audit({ actorId: actor.userId, action: "ADMIN_PASSWORD_RESET", targetType: "USER", targetId: target.id, requestId });
+    return { temporaryPassword };
   }
 }
 
