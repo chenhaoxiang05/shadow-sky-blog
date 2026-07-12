@@ -16,5 +16,10 @@ test("server-renders the Shadow Sky Phase 3 shell", async () => {
   assert.match(html, /<title>Shadow Sky/);
   assert.match(html, /分享正在发生的/);
   assert.match(html, /可检索、可复用/);
+  assert.match(html, /<html[^>]+data-theme="dark"/);
+  assert.match(html, /id="shadow-sky-theme-bootstrap"/);
+  assert.match(html, /aria-label="切换到浅色模式"/);
+  assert.match(html, /<button[^>]+type="button"[^>]+class="icon-btn theme-toggle"/);
+  assert.ok(html.indexOf("shadow-sky-theme-bootstrap") < html.indexOf("分享正在发生的"));
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });

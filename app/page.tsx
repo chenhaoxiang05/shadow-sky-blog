@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useRadialThemeTransition } from "./use-radial-theme-transition";
 
 type View = "home" | "articles" | "article" | "profile" | "bookmarks" | "studio" | "editor" | "admin" | "users" | "adminInvite" | "audit" | "login" | "invite" | "changePassword" | "forbidden";
 
@@ -41,7 +42,8 @@ function ArticleCard({ article, onOpen }: { article: (typeof articles)[number]; 
 
 export default function Home() {
   const [view, setView] = useState<View>("home");
-  const [dark, setDark] = useState(true);
+  const themeButtonRef = useRef<HTMLButtonElement>(null);
+  const { theme, toggleTheme, toggleLabel } = useRadialThemeTransition(themeButtonRef);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("全部");
   const [toast, setToast] = useState("");
@@ -114,7 +116,7 @@ export default function Home() {
   async function createDraft(action: "SAVE" | "SUBMIT") { setBusy(true); setSaveState("正在保存…"); try { const data = await api("/api/posts", { method: "POST", body: JSON.stringify({ title: editorForm.title, summary: editorForm.summary, content: editorForm.content, visibility: editorForm.visibility, coverImage: editorForm.coverImage || null, tags: editorForm.tags.split(",").map((tag) => tag.trim()).filter(Boolean) }) }); if (action === "SUBMIT") await api(`/api/posts/${data.post.id}/actions`, { method: "POST", body: JSON.stringify({ action: "SUBMIT" }) }); setSaveState(action === "SUBMIT" ? "已提交审核" : "草稿已安全保存"); notify(action === "SUBMIT" ? "文章已提交审核" : "草稿已保存"); } catch (error) { setSaveState("保存失败"); notify(error instanceof Error ? error.message : "保存失败"); } finally { setBusy(false); } }
 
   return (
-    <div className={dark ? "site dark" : "site light"}>
+    <div className={`site ${theme}`}>
       <header className="topbar">
         <button className="brand" onClick={() => navigate("home")} aria-label="返回首页"><span className="brand-mark">S</span><span>Shadow Sky</span><i>LAB</i></button>
         <nav className={mobileOpen ? "nav open" : "nav"}>
@@ -124,7 +126,19 @@ export default function Home() {
           <button onClick={() => navigate("studio")}>创作中心</button>
         </nav>
         <div className="top-actions">
-          <button className="icon-btn" onClick={() => setDark(!dark)} aria-label="切换主题">{dark ? "☼" : "◐"}</button>
+          <button
+            ref={themeButtonRef}
+            type="button"
+            className="icon-btn theme-toggle"
+            data-theme={theme}
+            onClick={() => { void toggleTheme(); }}
+            aria-label={toggleLabel}
+          >
+            <span className="theme-icon-stack" aria-hidden="true">
+              <span className="theme-icon theme-icon-sun" />
+              <span className="theme-icon theme-icon-moon" />
+            </span>
+          </button>
           <button className="search-shortcut" onClick={() => navigate("articles")}>⌕ <span>搜索</span><kbd>⌘ K</kbd></button>
           <button className="btn-secondary" onClick={() => navigate("login")}>登录</button>
           <button className="btn-primary" onClick={() => navigate("studio")}>写文章 <span>↗</span></button>
