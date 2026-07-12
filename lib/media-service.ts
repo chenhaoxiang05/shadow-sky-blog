@@ -13,6 +13,8 @@ const types = [
 export class MediaService {
   constructor(private repo: Repository, private storage: StorageProvider) {}
 
+  withRepository(repository: Repository) { return new MediaService(repository, this.storage); }
+
   async upload(actor: Actor, input: { data: Uint8Array; declaredMime: string; purpose: MediaPurpose; requestId: string }) {
     if (!hasRole(actor, input.purpose === "AVATAR" ? "MEMBER" : "CONTRIBUTOR")) throw new DomainError("FORBIDDEN", "当前角色不能上传此类图片", 403);
     const max = input.purpose === "AVATAR" ? 5_000_000 : 10_000_000;

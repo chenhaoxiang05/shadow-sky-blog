@@ -7,6 +7,7 @@ export type SearchInput = { actor: Actor; q?: string; page: number; pageSize: nu
 export type SearchPage = { posts: PostRecord[]; total: number; page: number; pageSize: number; nextPage: number | null };
 
 export interface Repository {
+  transaction<T>(work: (repository: Repository) => Promise<T>): Promise<T>;
   findUserByLogin(login: string): Promise<UserRecord | null>;
   findUserById(id: string): Promise<UserRecord | null>;
   listUsers(): Promise<Array<Omit<UserRecord, "passwordHash">>>;

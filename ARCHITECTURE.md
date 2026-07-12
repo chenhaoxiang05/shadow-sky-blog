@@ -29,6 +29,8 @@
 
 Sites 的 `.openai/hosting.json` 只保存预览项目 ID，不保存数据库或对象存储绑定。正式运行依赖标准 PostgreSQL URL、HTTP Cookie 和环境变量。`PostgresSearchProvider` 使用 `websearch_to_tsquery` 与 GIN 索引；`LocalStorageProvider` 是当前本地/测试适配器，可替换为 Azure Blob 而不改变媒体授权和文件验证。当前和近期版本不包含邮件或通知提供方。
 
+Sites 的边缘运行时通过 `@neondatabase/serverless` 与 `drizzle-orm/neon-serverless` 建立 WebSocket PostgreSQL 连接。每个 API 请求只创建一个数据库上下文，Repository、认证、文章、社区、搜索和媒体服务共享该上下文；统一请求包装器在成功、异常和提前返回时都通过 `finally` 关闭连接。模块全局不保存 Pool 或 Client，连接不会跨请求复用。文章写入、标签、媒体绑定和审计共用交互式事务，邀请接受与点赞计数原有事务保持不变。
+
 媒体访问由 `MediaService` 统一裁决。上传记录保存用途、所有者和可空的用户/文章绑定；头像只有在绑定到 ACTIVE 用户当前公开资料时可公开读取，文章媒体调用同一 `canReadPost` 策略。绑定、替换、软删除和物理文件清理都在服务端完成并审计。
 
 `SearchProvider` 的契约要求提供操作者上下文与所有过滤/分页参数。PostgreSQL 实现先构造角色、作者、状态和可见性条件，再执行稳定排序、`LIMIT/OFFSET` 与总数统计；领域层额外执行失败关闭校验，而不是分页后过滤。

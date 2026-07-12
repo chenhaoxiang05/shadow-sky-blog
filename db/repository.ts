@@ -1,14 +1,15 @@
 import { and, count, countDistinct, desc, eq, gt, gte, ilike, isNotNull, isNull, lte, notInArray, or, sql, sum } from "drizzle-orm";
 import type { Actor, AuditEvent, CommentRecord, InvitationRecord, MediaAssetRecord, MediaPurpose, PostRecord, PublishingPolicy, Role, SessionRecord, UserRecord, UserStatus } from "../lib/domain";
 import type { NewPost, PostChanges, Repository, SearchInput, SessionWithUser } from "../lib/repository";
-import { getDb } from "./index";
+import type { Database } from "./index";
 import { auditLogs, bookmarks, categories, comments, invitations, loginAttempts, mediaAssets, postLikes, posts, postTags, sessions, tags, users } from "./schema";
 
 const userShape = (row: typeof users.$inferSelect): UserRecord => ({ ...row, role: row.role as Exclude<Role, "VISITOR">, publishingPolicy: row.publishingPolicy as PublishingPolicy, status: row.status as UserStatus });
 const inviteShape = (row: typeof invitations.$inferSelect): InvitationRecord => ({ ...row, role: row.role as Exclude<Role, "VISITOR">, publishingPolicy: row.publishingPolicy as PublishingPolicy });
 
 export class PostgresRepository implements Repository {
-  private db = getDb();
+  constructor(private readonly db: Database) {}
+  async transaction<T>(work: (repository: Repository) => Promise<T>): Promise<T> { return this.db.transaction(async (tx): Promise<T> => work(new PostgresRepository(tx as unknown as Database))); }
   async findUserByLogin(login: string) { const [row] = await this.db.select().from(users).where(and(eq(users.handle, login), isNull(users.deletedAt))).limit(1); return row ? userShape(row) : null; }
   async findUserById(id: string) { const [row] = await this.db.select().from(users).where(and(eq(users.id, id), isNull(users.deletedAt))).limit(1); return row ? userShape(row) : null; }
   async listUsers() { const rows = await this.db.select().from(users).where(isNull(users.deletedAt)).orderBy(desc(users.createdAt)); return rows.map((row) => { const safe: Partial<UserRecord> = userShape(row); delete safe.passwordHash; return safe as Omit<UserRecord, "passwordHash">; }); }

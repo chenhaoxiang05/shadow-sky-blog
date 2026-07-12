@@ -7,6 +7,15 @@ export class MemoryRepository implements Repository {
   addUser(user: UserRecord) { this.users.set(user.id, user); return user; }
   addInvitation(invitation: InvitationRecord) { this.invitations.set(invitation.id, invitation); return invitation; }
   addPost(post: PostRecord) { this.posts.set(post.id, post); return post; }
+  async transaction<T>(work: (repository: Repository) => Promise<T>): Promise<T> {
+    const snapshot = {
+      users: structuredClone(this.users), invitations: structuredClone(this.invitations), sessions: structuredClone(this.sessions), posts: structuredClone(this.posts),
+      comments: structuredClone(this.comments), likes: structuredClone(this.likes), bookmarks: structuredClone(this.bookmarks), media: structuredClone(this.media),
+      audits: structuredClone(this.audits), failures: structuredClone(this.failures),
+    };
+    try { return await work(this); }
+    catch (error) { Object.assign(this, snapshot); throw error; }
+  }
   async findUserByLogin(login: string) { return [...this.users.values()].find((u) => !u.deletedAt && u.handle === login) ?? null; }
   async findUserById(id: string) { const user = this.users.get(id); return user && !user.deletedAt ? structuredClone(user) : null; }
   async listUsers() { return [...this.users.values()].filter((u) => !u.deletedAt).map((user) => { const safe: Partial<UserRecord> = structuredClone(user); delete safe.passwordHash; return safe as Omit<UserRecord, "passwordHash">; }); }

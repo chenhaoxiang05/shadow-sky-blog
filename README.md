@@ -24,7 +24,7 @@
 
 ## 技术栈
 
-React 19、Next.js 风格 App Router、TypeScript、Vinext、PostgreSQL、Drizzle ORM、`postgres` 驱动、Zod、`@noble/hashes` Argon2id、Marked 与 sanitize-html。
+React 19、Next.js 风格 App Router、TypeScript、Vinext、PostgreSQL、Drizzle ORM、`@neondatabase/serverless` WebSocket 驱动、Zod、`@noble/hashes` Argon2id、Marked 与 sanitize-html。Sites/Workers 运行时按请求创建 Neon 数据库上下文，并在响应完成前关闭连接；交互式事务继续由 `drizzle-orm/neon-serverless` 执行。
 
 ## 本地运行
 

@@ -45,3 +45,9 @@
 ## 0.1.0-phase1 — 2026-07-11
 
 - 产品架构、视觉系统、页面原型、初始数据模型与权限设计。
+# Unreleased
+
+- 将 Sites 运行时 PostgreSQL 驱动迁移到 Neon Serverless WebSocket 和 Drizzle Neon 适配器。
+- 为每个 API 请求创建并统一清理一个数据库上下文，避免跨请求连接复用和泄漏。
+- 保留邀请、点赞及文章事务，并将文章、媒体绑定与审计纳入同一事务边界。
+- 迁移命令改用官方 Neon Serverless migrator，不在 Worker 请求或应用启动时自动迁移。
