@@ -1,0 +1,150 @@
+"use client";
+
+import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  calculateReadingProgress,
+  findActiveReadingHeading,
+  slugifyReadingHeading,
+  uniqueReadingHeadingId,
+  type HeadingPosition,
+  type ReadingHeading,
+} from "@/lib/reading-experience";
+
+type Props = { articleRef: RefObject<HTMLElement | null>; active: boolean };
+
+export function ReadingExperience({ articleRef, active }: Props) {
+  const [headings, setHeadings] = useState<ReadingHeading[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const positionsRef = useRef<HeadingPosition[]>([]);
+  const activeIdRef = useRef("");
+
+  useEffect(() => {
+    if (!active) return;
+    const article = articleRef.current;
+    if (!article) return;
+    const articleElement: HTMLElement = article;
+    let animationFrame = 0;
+
+    function collectHeadings() {
+      const used = new Set<string>();
+      const elements = Array.from(articleElement.querySelectorAll<HTMLHeadingElement>(".prose h2, .prose h3"));
+      const outline = elements.flatMap<ReadingHeading>((heading, index) => {
+        const label = heading.textContent?.trim();
+        if (!label) return [];
+        const preferred = heading.id || slugifyReadingHeading(label, index);
+        const id = uniqueReadingHeadingId(preferred, used);
+        heading.id = id;
+        return [{ id, label, level: heading.tagName === "H3" ? 3 : 2 }];
+      });
+      positionsRef.current = elements
+        .filter((heading) => heading.id)
+        .map((heading) => ({ id: heading.id, top: window.scrollY + heading.getBoundingClientRect().top }))
+        .sort((left, right) => left.top - right.top);
+      setHeadings(outline);
+    }
+
+    function updateReadingState() {
+      const rect = articleElement.getBoundingClientRect();
+      const start = window.scrollY + rect.top;
+      const end = start + Math.max(articleElement.scrollHeight - window.innerHeight, 1);
+      const nextProgress = calculateReadingProgress(window.scrollY, start, end);
+      const nextActiveId = findActiveReadingHeading(positionsRef.current, window.scrollY);
+      setProgress(nextProgress);
+      setShowBackToTop(nextProgress > 12);
+      if (nextProgress <= 1) {
+        activeIdRef.current = "";
+        setActiveId("");
+        if (window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+        return;
+      }
+      if (nextActiveId && nextActiveId !== activeIdRef.current) {
+        activeIdRef.current = nextActiveId;
+        setActiveId(nextActiveId);
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${encodeURIComponent(nextActiveId)}`);
+      }
+    }
+
+    function scheduleUpdate() {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(updateReadingState);
+    }
+
+    const initialFrame = window.requestAnimationFrame(() => {
+      collectHeadings();
+      updateReadingState();
+    });
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      window.cancelAnimationFrame(initialFrame);
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [active, articleRef]);
+
+  if (!active) return null;
+
+  function prefersReducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function goToHeading(id: string) {
+    const heading = articleRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    if (!heading) return;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${encodeURIComponent(id)}`);
+    heading.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+    activeIdRef.current = id;
+    setActiveId(id);
+    setTocOpen(false);
+  }
+
+  function backToTop() {
+    const top = Math.max(0, (articleRef.current?.offsetTop ?? 0) - 72);
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    window.scrollTo({ top, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  }
+
+  return (
+    <>
+      <div className="reading-progress" role="progressbar" aria-label="文章阅读进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
+        <span style={{ transform: `scaleX(${progress / 100})` }} />
+      </div>
+      <aside className={tocOpen ? "reading-toc open" : "reading-toc"}>
+        <button
+          type="button"
+          className="reading-toc-toggle"
+          aria-expanded={tocOpen}
+          aria-controls="reading-toc-links"
+          onClick={() => setTocOpen((current) => !current)}
+        >
+          <span>本文目录</span><span aria-hidden="true">{tocOpen ? "−" : "+"}</span>
+        </button>
+        <nav id="reading-toc-links" aria-label="文章目录">
+          <b>本文目录</b>
+          {headings.length ? headings.map((heading, index) => (
+            <button
+              type="button"
+              key={heading.id}
+              className={heading.level === 3 ? "toc-level-3" : undefined}
+              aria-current={heading.id === activeId ? "location" : undefined}
+              onClick={() => goToHeading(heading.id)}
+            >
+              <span>{String(index + 1).padStart(2, "0")}</span>{heading.label}
+            </button>
+          )) : <span className="reading-toc-empty">正文暂无章节标题</span>}
+        </nav>
+      </aside>
+      <button
+        type="button"
+        className={showBackToTop ? "back-to-top visible" : "back-to-top"}
+        onClick={backToTop}
+        aria-label="返回文章顶部"
+        tabIndex={showBackToTop ? 0 : -1}
+      ><span aria-hidden="true">↑</span></button>
+    </>
+  );
+}
