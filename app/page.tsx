@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
+import { needsMediaContext, needsOperatorContext } from "@/lib/view-context";
 
 type View = "home" | "articles" | "article" | "profile" | "bookmarks" | "studio" | "editor" | "admin" | "users" | "adminInvite" | "audit" | "login" | "invite" | "changePassword" | "forbidden";
 
@@ -43,6 +44,8 @@ function ArticleCard({ article, onOpen }: { article: (typeof articles)[number]; 
 export default function Home() {
   const [view, setView] = useState<View>("home");
   const themeButtonRef = useRef<HTMLButtonElement>(null);
+  const mediaContextStateRef = useRef<"idle" | "loading" | "loaded">("idle");
+  const operatorContextStateRef = useRef<"idle" | "loading" | "loaded">("idle");
   const { theme, toggleTheme, toggleLabel } = useRadialThemeTransition(themeButtonRef);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("全部");
@@ -79,18 +82,38 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!needsMediaContext(view) || mediaContextStateRef.current !== "idle") return;
     let active = true;
-    fetch("/api/media").then((response) => response.ok ? response.json() : null).then((data) => { if (active) setMediaUploadEnabled(data?.uploadEnabled === true); }).catch(() => undefined);
-    return () => { active = false; };
-  }, []);
+    const controller = new AbortController();
+    mediaContextStateRef.current = "loading";
+    fetch("/api/media", { signal: controller.signal }).then((response) => response.ok ? response.json() : null).then((data) => {
+      if (!active) return;
+      setMediaUploadEnabled(data?.uploadEnabled === true);
+      mediaContextStateRef.current = "loaded";
+    }).catch(() => { if (!controller.signal.aborted) mediaContextStateRef.current = "idle"; });
+    return () => {
+      active = false;
+      controller.abort();
+      if (mediaContextStateRef.current === "loading") mediaContextStateRef.current = "idle";
+    };
+  }, [view]);
 
   useEffect(() => {
+    if (!needsOperatorContext(view) || operatorContextStateRef.current !== "idle") return;
     let active = true;
-    fetch("/api/auth/session", { credentials: "include" }).then(async (response) => response.ok ? response.json() : null).then((data) => {
-      if (active && (data?.user?.role === "OWNER" || data?.user?.role === "ADMIN")) setOperatorRole(data.user.role);
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, []);
+    const controller = new AbortController();
+    operatorContextStateRef.current = "loading";
+    fetch("/api/auth/session", { credentials: "include", signal: controller.signal }).then(async (response) => response.ok ? response.json() : null).then((data) => {
+      if (!active) return;
+      if (data?.user?.role === "OWNER" || data?.user?.role === "ADMIN") setOperatorRole(data.user.role);
+      operatorContextStateRef.current = "loaded";
+    }).catch(() => { if (!controller.signal.aborted) operatorContextStateRef.current = "idle"; });
+    return () => {
+      active = false;
+      controller.abort();
+      if (operatorContextStateRef.current === "loading") operatorContextStateRef.current = "idle";
+    };
+  }, [view]);
 
   function navigate(next: View) {
     setView(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
