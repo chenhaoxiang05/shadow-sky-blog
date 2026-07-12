@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { CommandPalette } from "./command-palette";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
+import type { PaletteDestination, SearchPost } from "@/lib/command-palette";
 
 type View = "home" | "articles" | "article" | "profile" | "bookmarks" | "studio" | "editor" | "admin" | "users" | "adminInvite" | "audit" | "login" | "invite" | "changePassword" | "forbidden";
 
@@ -19,6 +21,9 @@ const categories = [
 const authors = [
   ["Sky Pan", "SP", "18 篇文章", "Azure · Next.js"], ["Lin Chen", "LC", "14 篇文章", "AI Engineering"], ["Mika", "MK", "11 篇文章", "Backend · Data"], ["Alice Zhou", "AZ", "9 篇文章", "Design · Community"],
 ];
+
+const paletteCategories = categories.map(([name]) => name);
+const paletteTags = Array.from(new Set(articles.flatMap((article) => article.tags)));
 
 const delegatedRoles = ["MEMBER", "CONTRIBUTOR", "AUTHOR", "EDITOR"] as const;
 
@@ -48,6 +53,8 @@ export default function Home() {
   const [filter, setFilter] = useState("全部");
   const [toast, setToast] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [selectedSearchPost, setSelectedSearchPost] = useState<SearchPost | null>(null);
   const [busy, setBusy] = useState(false);
   const [loginForm, setLoginForm] = useState({ login: "", password: "" });
   const [inviteForm, setInviteForm] = useState({ token: "", handle: "", displayName: "", password: "", confirmPassword: "" });
@@ -100,6 +107,27 @@ export default function Home() {
     setToast(message); window.setTimeout(() => setToast(""), 2200);
   }
 
+  function selectCommand(destination: PaletteDestination) {
+    if (destination.kind === "page") {
+      navigate(destination.view);
+      return;
+    }
+    if (destination.kind === "category") {
+      setFilter(destination.value);
+      setQuery("");
+      navigate("articles");
+      return;
+    }
+    if (destination.kind === "tag") {
+      setFilter("全部");
+      setQuery(destination.value);
+      navigate("articles");
+      return;
+    }
+    setSelectedSearchPost(destination.post);
+    navigate("article");
+  }
+
   function csrfToken() { return document.cookie.split(";").map((part) => part.trim().split("=")).find(([key]) => key === "shadow_sky_csrf")?.slice(1).join("=") ?? ""; }
   async function api(path: string, init: RequestInit = {}) {
     const response = await fetch(path, { ...init, credentials: "include", headers: { ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }), ...(init.method && init.method !== "GET" ? { "x-csrf-token": csrfToken() } : {}), ...init.headers } });
@@ -139,12 +167,27 @@ export default function Home() {
               <span className="theme-icon theme-icon-moon" />
             </span>
           </button>
-          <button className="search-shortcut" onClick={() => navigate("articles")}>⌕ <span>搜索</span><kbd>⌘ K</kbd></button>
+          <button
+            type="button"
+            className="search-shortcut"
+            onClick={() => setCommandPaletteOpen(true)}
+            aria-label="打开全局搜索"
+            aria-haspopup="dialog"
+            aria-expanded={commandPaletteOpen}
+          ><span className="search-icon" aria-hidden="true" /><span>搜索</span><kbd>⌘ K</kbd></button>
           <button className="btn-secondary" onClick={() => navigate("login")}>登录</button>
           <button className="btn-primary" onClick={() => navigate("studio")}>写文章 <span>↗</span></button>
           <button className="menu-btn" onClick={() => setMobileOpen(!mobileOpen)} aria-label="打开菜单">☰</button>
         </div>
       </header>
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onSelect={selectCommand}
+        categories={paletteCategories}
+        tags={paletteTags}
+      />
 
       <main>
         {view === "home" && <>
@@ -190,9 +233,9 @@ export default function Home() {
 
         {view === "article" && <article className="reading-page page-enter">
           <button className="back-link" onClick={() => navigate("articles")}>← 返回文章</button>
-          <div className="article-hero"><span className="pill">AI Engineering</span><h1>把一个 AI Agent<br />从 Demo 带到生产环境</h1><p>从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。</p><div className="article-byline"><Avatar initials="LC" /><div><b>Lin Chen</b><span>2026 年 7 月 9 日 · 8 分钟阅读</span></div><button onClick={() => { setLiked(!liked); notify(liked ? "已取消点赞" : "已点赞"); }}>{liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => { setBookmarked(!bookmarked); notify(bookmarked ? "已取消收藏" : "已加入我的收藏"); }}>{bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
+          <div className="article-hero"><span className="pill">{selectedSearchPost?.tags[0] ?? "AI Engineering"}</span><h1>{selectedSearchPost ? selectedSearchPost.title : <>把一个 AI Agent<br />从 Demo 带到生产环境</>}</h1><p>{selectedSearchPost?.summary ?? "从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。"}</p><div className="article-byline"><Avatar initials="LC" /><div><b>Lin Chen</b><span>2026 年 7 月 9 日 · 8 分钟阅读</span></div><button onClick={() => { setLiked(!liked); notify(liked ? "已取消点赞" : "已点赞"); }}>{liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => { setBookmarked(!bookmarked); notify(bookmarked ? "已取消收藏" : "已加入我的收藏"); }}>{bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
           <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>production_ready = evaluation + observability + boundaries</pre></div></div>
-          <div className="reading-layout"><aside><b>本文目录</b><a href="#context">01 背景</a><a href="#evaluation">02 持续评估</a><a href="#boundary">03 权限边界</a><a href="#summary">04 总结</a></aside><div className="prose"><p className="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div className="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p></div></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
+          <div className="reading-layout"><aside><b>本文目录</b>{selectedSearchPost ? <span>正文标题将作为章节导航</span> : <><a href="#context">01 背景</a><a href="#evaluation">02 持续评估</a><a href="#boundary">03 权限边界</a><a href="#summary">04 总结</a></>}</aside>{selectedSearchPost?.contentHtml ? <div className="prose" dangerouslySetInnerHTML={{ __html: selectedSearchPost.contentHtml }} /> : <div className="prose"><p className="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div className="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p></div>}</div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
         </article>}
 
         {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && <><label className="btn-secondary upload-button">上传封面<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button">插入正文图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
