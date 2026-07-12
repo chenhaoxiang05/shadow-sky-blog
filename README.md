@@ -2,7 +2,7 @@
 
 群聊成员共同维护的现代技术社区 Blog。用于分享技术文章、学习记录、项目成果和群内知识资料。ChatGPT Sites 仅用于开发预览；生产目标是 Microsoft Azure。
 
-## Phase 2 功能
+## Phase 3 功能
 
 - 纯邀请码注册；用户名 handle + 密码登录；安全 Session、登出、修改密码、账户禁用与资料维护。
 - 不使用邮箱验证、邮件通知或自动找回密码。忘记密码由 Owner/Admin 人工重置，用户随后必须修改临时密码。
@@ -12,8 +12,15 @@
 - `PUBLIC`、`MEMBERS_ONLY`、`PRIVATE` 服务端可见性控制。
 - 用户、发布策略、审核与安全事件审计；重要日志最低保留 180 天。
 - 创作中心、编辑器、审核、用户管理、邀请、审计、登录与错误状态界面。
+- 嵌套评论、作者修改与软删除、Admin/Owner 管理、服务端 XSS 清理和频率限制。
+- 幂等点赞与收藏、“我的收藏”可见性复核、PostgreSQL 全文搜索与 `SearchProvider`。
+- PNG/JPEG/WebP/GIF 真实 MIME 校验、本地 `StorageProvider` 与 Azure Blob 适配边界。
+- 媒体记录持久化 `purpose`、所有者及用户/文章绑定；读取继承头像公开状态或文章可见性，受保护媒体禁止共享缓存。
+- 不暴露邮箱和权限策略的成员公开主页、公开文章数与获赞数。
 
-评论、收藏、全文搜索和真实图片上传仍属于 Phase 3；Azure 基础设施自动化和正式切流属于 Phase 4。
+搜索支持 `q`、页码、受限 `pageSize`、分类、标签、作者和时间范围。可见性在 PostgreSQL 中先于分页执行，并按 `publishedAt + id` 稳定排序。
+
+邮件、邮箱验证、通知中心、实时聊天、私信、WebSocket、MFA 不在 Phase 3 范围；Azure 基础设施自动化和正式切流属于 Phase 4。
 
 ## 技术栈
 

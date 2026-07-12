@@ -1,0 +1,2 @@
+import { errorResponse, json, mutationAuth, requestId, services } from "@/lib/http";
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) { try { const { actor } = await mutationAuth(request); const { id } = await params; return json({ comment: await services().community.restoreComment(actor, id, requestId(request)) }); } catch (error) { return errorResponse(error); } }

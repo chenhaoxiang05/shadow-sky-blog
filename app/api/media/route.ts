@@ -1,0 +1,4 @@
+import { z } from "zod";
+import { errorResponse, json, mutationAuth, requestId, services } from "@/lib/http";
+const purposeSchema = z.enum(["AVATAR", "COVER", "CONTENT"]);
+export async function POST(request: Request) { try { const { actor } = await mutationAuth(request); const form = await request.formData(); const file = form.get("file"); if (!(file instanceof File)) return json({ error: { code: "INVALID_INPUT", message: "缺少图片文件" } }, { status: 400 }); const purpose = purposeSchema.parse(form.get("purpose")); const asset = await services().media.upload(actor, { data: new Uint8Array(await file.arrayBuffer()), declaredMime: file.type, purpose, requestId: requestId(request) }); return json({ asset }, { status: 201 }); } catch (error) { return errorResponse(error); } }
