@@ -10,14 +10,16 @@ export class PostService {
   async create(actor: Actor, input: { title: string; slug?: string; summary: string; content: string; visibility: Visibility; coverImage?: string | null; categoryId?: string | null; tags?: string[]; requestId: string }, now = new Date()) {
     if (!canCreatePost(actor)) throw new DomainError("FORBIDDEN", "当前角色不能创建文章", 403);
     const contentHtml = await renderSafeMarkdown(input.content);
-    return this.repo.transaction(async (repo) => {
+    const result = await this.repo.transaction(async (repo) => {
       const media = this.media?.withRepository(repo);
       await media?.validatePostMedia(actor, input.coverImage, input.content);
       const post = await repo.createPost({ authorId: actor.userId!, title: input.title.trim(), slug: slugify(input.slug || input.title), summary: input.summary.trim(), content: input.content, contentHtml, visibility: input.visibility, coverImage: input.coverImage, categoryId: input.categoryId, tags: normalizeTags(input.tags) }, now);
-      await media?.bindPostMedia(actor, post.id, post.coverImage, post.content, input.requestId, now);
+      const cleanup = await media?.bindPostMedia(actor, post.id, post.coverImage, post.content, input.requestId, now) ?? [];
       await repo.audit({ actorId: actor.userId, action: "POST_CREATED", targetType: "POST", targetId: post.id, requestId: input.requestId });
-      return post;
+      return { post, cleanup };
     });
+    await this.media?.cleanupAfterCommit(result.cleanup, input.requestId, now);
+    return result.post;
   }
 
   async update(actor: Actor, id: string, input: PostChanges & { expectedRevision: number; requestId: string }, now = new Date()) {
@@ -26,14 +28,16 @@ export class PostService {
     const changes: PostChanges = { ...input };
     delete (changes as PostChanges & { expectedRevision?: number }).expectedRevision; delete (changes as PostChanges & { requestId?: string }).requestId;
     if (changes.title) changes.title = changes.title.trim(); if (changes.slug) changes.slug = slugify(changes.slug); if (changes.content !== undefined) changes.contentHtml = await renderSafeMarkdown(changes.content); if (changes.tags) changes.tags = normalizeTags(changes.tags);
-    return this.repo.transaction(async (repo) => {
+    const result = await this.repo.transaction(async (repo) => {
       const media = this.media?.withRepository(repo);
       await media?.validatePostMedia(actor, changes.coverImage !== undefined ? changes.coverImage : post.coverImage, changes.content ?? post.content, post.id);
       const updated = await repo.updatePost(id, changes, input.expectedRevision, now); if (!updated) throw new DomainError("CONFLICT", "文章已被其他编辑更新，请刷新后重试", 409);
-      await media?.bindPostMedia(actor, updated.id, updated.coverImage, updated.content, input.requestId, now);
+      const cleanup = await media?.bindPostMedia(actor, updated.id, updated.coverImage, updated.content, input.requestId, now) ?? [];
       await repo.audit({ actorId: actor.userId, action: "POST_UPDATED", targetType: "POST", targetId: id, requestId: input.requestId, metadata: { revision: updated.revision } });
-      return updated;
+      return { updated, cleanup };
     });
+    await this.media?.cleanupAfterCommit(result.cleanup, input.requestId, now);
+    return result.updated;
   }
 
   async submit(actor: Actor, id: string, requestId: string, now = new Date()) {

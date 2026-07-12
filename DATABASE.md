@@ -18,6 +18,8 @@ User 包含唯一 `handle`、`role`、`publishing_policy`、`status`、`password
 
 运行时和迁移脚本均使用 Drizzle 0.45.2 已提供的 Neon Serverless 适配器。`npm run db:migrate` 是显式 Node 维护命令，使用 `drizzle-orm/neon-serverless/migrator` 应用现有 SQL 迁移并在完成后关闭连接；应用启动和 Worker 请求不会自动迁移。执行环境需要 Node.js 22+、可用的 WebSocket/TLS 网络访问以及单独注入的 `DATABASE_URL`。
 
+`0004_broken_killer_shrike.sql` 增加媒体清理状态、请求时间、完成时间、尝试次数和稳定错误代码。软删除媒体在数据库事务中进入 `PENDING`；物理对象删除成功后更新为 `COMPLETED`。`npm run media:prune` 只查询已软删除、无用户/文章引用且仍为 `PENDING` 的记录，因此可以安全重复执行。该迁移不会由应用自动执行。
+
 `0002_phase3_community_media.sql` 新增可选 GitHub/个人网站字段、评论父级外键，以及文章、成员、分类和标签的 PostgreSQL GIN 搜索索引。`post_likes` 与 `bookmarks` 的复合主键保证幂等。
 
 `0003_media_authorization_comments_search.sql` 新增媒体用途枚举、用户/文章绑定字段与约束、绑定索引，以及限制为 0/1 的评论深度。迁移会为已有未分类媒体安全回填 `CONTENT` 后再启用非空约束。

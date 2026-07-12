@@ -6,8 +6,9 @@ import { createDatabaseContext, DatabaseConfigurationError, type Database, type 
 import { errorResponse, json, requestHandler, services } from "../lib/http";
 import { MediaService, mediaUrl } from "../lib/media-service";
 import { PostService } from "../lib/post-service";
-import type { StorageProvider } from "../lib/storage";
+import { mediaUploadEnabled, type StorageProvider } from "../lib/storage";
 import { MemoryRepository, actor } from "./helpers/memory-repository";
+import { POST as uploadMedia } from "../app/api/media/route";
 
 function fakePool() {
   let queries = 0;
@@ -76,6 +77,57 @@ test("请求抛出异常后仍关闭连接且返回安全错误", async () => {
     assert.equal(closes, 1);
     assert.equal((await response.text()).includes("connection detail"), false);
   } finally { console.error = original; }
+});
+
+test("正常 HTTP 响应不被 close 失败覆盖", async () => {
+  const original = console.error; console.error = () => undefined;
+  try {
+    const handler = requestHandler(async () => json({ ok: true }, { status: 202 }), () => ({ db: {} as Database, async close() { throw new Error("postgresql://secret@host/database"); } }));
+    const response = await handler(new Request("https://example.test"));
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { ok: true });
+  } finally { console.error = original; }
+});
+
+test("业务异常和 close 同时失败时保留原安全错误响应", async () => {
+  const original = console.error; console.error = () => undefined;
+  try {
+    const handler = requestHandler(async () => { throw new Error("business secret"); }, () => ({ db: {} as Database, async close() { throw new Error("database secret"); } }));
+    const response = await handler(new Request("https://example.test"));
+    assert.equal(response.status, 500);
+    assert.equal((await response.text()).includes("secret"), false);
+  } finally { console.error = original; }
+});
+
+test("close 清理日志只包含固定错误代码", async () => {
+  const logs: string[] = []; const original = console.error; console.error = (...values) => { logs.push(values.join(" ")); };
+  try {
+    const handler = requestHandler(async () => json({ ok: true }), () => ({ db: {} as Database, async close() { throw new Error("postgresql://user:password@private-host/db"); } }));
+    await handler(new Request("https://example.test"));
+    assert.deepEqual(logs, ["DATABASE_CONTEXT_CLOSE_FAILED"]);
+  } finally { console.error = original; }
+});
+
+test("媒体上传功能默认关闭且只能显式启用", () => {
+  const previous = process.env.MEDIA_UPLOAD_ENABLED;
+  try {
+    delete process.env.MEDIA_UPLOAD_ENABLED; assert.equal(mediaUploadEnabled(), false);
+    process.env.MEDIA_UPLOAD_ENABLED = "false"; assert.equal(mediaUploadEnabled(), false);
+    process.env.MEDIA_UPLOAD_ENABLED = "true"; assert.equal(mediaUploadEnabled(), true);
+  } finally { if (previous === undefined) delete process.env.MEDIA_UPLOAD_ENABLED; else process.env.MEDIA_UPLOAD_ENABLED = previous; }
+});
+
+test("媒体上传关闭时 API 返回安全 503 且不创建数据库上下文", async () => {
+  const previousFlag = process.env.MEDIA_UPLOAD_ENABLED; const previousUrl = process.env.DATABASE_URL;
+  delete process.env.MEDIA_UPLOAD_ENABLED; delete process.env.DATABASE_URL;
+  try {
+    const response = await uploadMedia(new Request("https://example.test/api/media", { method: "POST" }));
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: { code: "FEATURE_UNAVAILABLE", message: "媒体上传暂未启用" } });
+  } finally {
+    if (previousFlag === undefined) delete process.env.MEDIA_UPLOAD_ENABLED; else process.env.MEDIA_UPLOAD_ENABLED = previousFlag;
+    if (previousUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previousUrl;
+  }
 });
 
 test("数据库上下文 close 幂等，避免重复释放", async () => {

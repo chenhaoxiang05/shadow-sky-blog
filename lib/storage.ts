@@ -3,6 +3,8 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 
 export interface StorageProvider { put(data: Uint8Array, extension: string): Promise<string>; get(key: string): Promise<Uint8Array>; delete(key: string): Promise<void>; }
 
+export function mediaUploadEnabled() { return process.env.MEDIA_UPLOAD_ENABLED === "true"; }
+
 export class LocalStorageProvider implements StorageProvider {
   private root = path.resolve(process.env.UPLOAD_ROOT || path.join(process.cwd(), "uploads"));
   async put(data: Uint8Array, extension: string) { await mkdir(this.root, { recursive: true }); const key = `${crypto.randomUUID()}.${extension}`; await writeFile(this.safePath(key), data); return key; }

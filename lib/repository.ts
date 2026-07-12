@@ -54,4 +54,7 @@ export interface Repository {
   bindMediaToPost(id: string, postId: string): Promise<MediaAssetRecord | null>;
   unbindMedia(id: string): Promise<MediaAssetRecord | null>;
   softDeleteMedia(id: string, now: Date): Promise<MediaAssetRecord | null>;
+  listPendingMediaCleanup(limit?: number): Promise<MediaAssetRecord[]>;
+  markMediaCleanupCompleted(id: string, now: Date): Promise<boolean>;
+  recordMediaCleanupFailure(id: string, errorCode: string, now: Date): Promise<boolean>;
 }

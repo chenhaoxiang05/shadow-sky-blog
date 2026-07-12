@@ -10,6 +10,9 @@ const types = [
   { mime: "image/gif", ext: "gif", test: (b: Uint8Array) => b.length > 6 && ["GIF87a", "GIF89a"].includes(text(b, 0, 6)) },
 ] as const;
 
+export type MediaCleanupTask = Pick<MediaAssetRecord, "id" | "storageKey">;
+export type MediaCleanupResult = { completed: number; failed: number };
+
 export class MediaService {
   constructor(private repo: Repository, private storage: StorageProvider) {}
 
@@ -25,8 +28,11 @@ export class MediaService {
     try {
       const buffer = new ArrayBuffer(input.data.byteLength); new Uint8Array(buffer).set(input.data);
       const sha256 = bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", buffer)));
-      const asset = await this.repo.createMediaAsset({ ownerId: actor.userId!, purpose: input.purpose, storageKey, mimeType: detected.mime, byteSize: input.data.length, sha256 });
-      await this.repo.audit({ actorId: actor.userId, action: "MEDIA_UPLOADED", targetType: "MEDIA", targetId: asset.id, requestId: input.requestId, metadata: { purpose: input.purpose, mimeType: detected.mime, byteSize: input.data.length } });
+      const asset = await this.repo.transaction(async (repo) => {
+        const created = await repo.createMediaAsset({ ownerId: actor.userId!, purpose: input.purpose, storageKey, mimeType: detected.mime, byteSize: input.data.length, sha256 });
+        await repo.audit({ actorId: actor.userId, action: "MEDIA_UPLOADED", targetType: "MEDIA", targetId: created.id, requestId: input.requestId, metadata: { purpose: input.purpose, mimeType: detected.mime, byteSize: input.data.length } });
+        return created;
+      });
       return { ...asset, url: mediaUrl(asset.id) };
     } catch (error) { await this.storage.delete(storageKey); throw error; }
   }
@@ -47,13 +53,18 @@ export class MediaService {
   }
 
   async setAvatar(actor: Actor, url: string | null, requestId: string, now = new Date()) {
-    const user = await this.repo.findUserById(actor.userId!); if (!user) throw new DomainError("NOT_FOUND", "用户不存在", 404);
-    const previousId = parseMediaId(user.avatarKey); const nextId = parseMediaId(url);
-    if (url && !nextId) throw new DomainError("INVALID_INPUT", "头像必须使用内部媒体地址", 400);
-    if (nextId) { const asset = await this.requiredAsset(nextId); this.assertBinding(actor, asset, "AVATAR"); if (asset.linkedPostId || (asset.linkedUserId && asset.linkedUserId !== user.id)) throw new DomainError("CONFLICT", "媒体已被其他内容使用", 409); await this.repo.bindMediaToUser(asset.id, user.id); await this.repo.audit({ actorId: actor.userId, action: "MEDIA_BOUND", targetType: "MEDIA", targetId: asset.id, requestId, metadata: { usage: "AVATAR", userId: user.id } }); }
-    const updated = await this.repo.updateUserProfile(user.id, { avatarKey: url }, now); if (!updated) throw new DomainError("NOT_FOUND", "用户不存在", 404);
-    if (previousId && previousId !== nextId) await this.retire(previousId, actor, requestId, now);
-    return updated;
+    const result = await this.repo.transaction(async (repo) => {
+      const media = this.withRepository(repo);
+      const user = await repo.findUserById(actor.userId!); if (!user) throw new DomainError("NOT_FOUND", "用户不存在", 404);
+      const previousId = parseMediaId(user.avatarKey); const nextId = parseMediaId(url);
+      if (url && !nextId) throw new DomainError("INVALID_INPUT", "头像必须使用内部媒体地址", 400);
+      if (nextId) { const asset = await media.requiredAsset(nextId); media.assertBinding(actor, asset, "AVATAR"); if (asset.linkedPostId || (asset.linkedUserId && asset.linkedUserId !== user.id)) throw new DomainError("CONFLICT", "媒体已被其他内容使用", 409); await repo.bindMediaToUser(asset.id, user.id); await repo.audit({ actorId: actor.userId, action: "MEDIA_BOUND", targetType: "MEDIA", targetId: asset.id, requestId, metadata: { usage: "AVATAR", userId: user.id } }); }
+      const updated = await repo.updateUserProfile(user.id, { avatarKey: url }, now); if (!updated) throw new DomainError("NOT_FOUND", "用户不存在", 404);
+      const cleanup = previousId && previousId !== nextId ? [await media.queueRetirement(previousId, actor, requestId, now)].filter(Boolean) as MediaCleanupTask[] : [];
+      return { updated, cleanup };
+    });
+    await this.cleanupAfterCommit(result.cleanup, requestId, now);
+    return result.updated;
   }
 
   async validatePostMedia(actor: Actor, coverImage: string | null | undefined, content: string, postId?: string) {
@@ -63,20 +74,54 @@ export class MediaService {
   }
 
   async bindPostMedia(actor: Actor, postId: string, coverImage: string | null | undefined, content: string, requestId: string, now = new Date()) {
-    const refs = await this.validatePostMedia(actor, coverImage, content, postId); const currentIds = new Set(refs.map((ref) => ref.id));
+    const refs = await this.validatePostMedia(actor, coverImage, content, postId); const currentIds = new Set(refs.map((ref) => ref.id)); const cleanup: MediaCleanupTask[] = [];
     for (const ref of refs) { await this.repo.bindMediaToPost(ref.id, postId); await this.repo.audit({ actorId: actor.userId, action: "MEDIA_BOUND", targetType: "MEDIA", targetId: ref.id, requestId, metadata: { usage: ref.purpose, postId } }); }
-    for (const old of await this.repo.listMediaAssetsForPost(postId)) if (!currentIds.has(old.id)) await this.retire(old.id, actor, requestId, now);
+    for (const old of await this.repo.listMediaAssetsForPost(postId)) if (!currentIds.has(old.id)) { const task = await this.queueRetirement(old.id, actor, requestId, now); if (task) cleanup.push(task); }
+    return cleanup;
   }
 
   async delete(actor: Actor, id: string, requestId: string, now = new Date()) {
-    const asset = await this.requiredAsset(id); if (!this.canManage(actor, asset)) throw new DomainError("FORBIDDEN", "不能删除此图片", 403); if (asset.linkedPostId || asset.linkedUserId) throw new DomainError("CONFLICT", "媒体仍被内容引用，不能删除", 409); await this.retire(id, actor, requestId, now); return { ok: true };
+    const cleanup = await this.repo.transaction(async (repo) => {
+      const media = this.withRepository(repo); const asset = await media.requiredAsset(id);
+      if (!media.canManage(actor, asset)) throw new DomainError("FORBIDDEN", "不能删除此图片", 403);
+      if (asset.linkedPostId || asset.linkedUserId) throw new DomainError("CONFLICT", "媒体仍被内容引用，不能删除", 409);
+      const task = await media.queueRetirement(id, actor, requestId, now); return task ? [task] : [];
+    });
+    await this.cleanupAfterCommit(cleanup, requestId, now);
+    return { ok: true };
+  }
+
+  async cleanupAfterCommit(tasks: MediaCleanupTask[], requestId: string, now = new Date()): Promise<MediaCleanupResult> {
+    let completed = 0; let failed = 0;
+    for (const task of tasks) {
+      try {
+        await this.storage.delete(task.storageKey);
+        if (await this.repo.markMediaCleanupCompleted(task.id, now)) {
+          completed++;
+          await this.repo.audit({ action: "MEDIA_CLEANUP_COMPLETED", targetType: "MEDIA", targetId: task.id, requestId });
+        }
+      } catch {
+        failed++;
+        try {
+          await this.repo.recordMediaCleanupFailure(task.id, "STORAGE_DELETE_FAILED", now);
+          await this.repo.audit({ action: "MEDIA_CLEANUP_FAILED", targetType: "MEDIA", targetId: task.id, requestId, outcome: "FAILURE", reason: "STORAGE_DELETE_FAILED" });
+        } catch { console.error("MEDIA_CLEANUP_STATE_UPDATE_FAILED"); }
+        console.error("MEDIA_CLEANUP_FAILED");
+      }
+    }
+    return { completed, failed };
+  }
+
+  async prunePending(limit = 100, requestId = crypto.randomUUID(), now = new Date()) {
+    const pending = await this.repo.listPendingMediaCleanup(limit);
+    return this.cleanupAfterCommit(pending.map(({ id, storageKey }) => ({ id, storageKey })), requestId, now);
   }
 
   private async requiredAsset(id: string) { const asset = await this.repo.findMediaAssetById(id); if (!asset) throw new DomainError("NOT_FOUND", "图片不存在", 404); return asset; }
   private canManage(actor: Actor, asset: MediaAssetRecord) { return actor.userId === asset.ownerId || hasRole(actor, "ADMIN"); }
   private assertBinding(actor: Actor, asset: MediaAssetRecord, purpose: MediaPurpose) { if (asset.purpose !== purpose) throw new DomainError("INVALID_INPUT", "媒体用途与使用位置不匹配", 400); if (!this.canManage(actor, asset)) throw new DomainError("FORBIDDEN", "不能引用其他用户的媒体", 403); }
   private postReferences(coverImage: string | null | undefined, content: string) { const refs: Array<{ id: string; purpose: "COVER" | "CONTENT" }> = []; const coverId = parseMediaId(coverImage); if (coverImage?.startsWith("/api/media/") && !coverId) throw new DomainError("INVALID_INPUT", "封面媒体地址无效", 400); if (coverId) refs.push({ id: coverId, purpose: "COVER" }); const ids = new Set<string>(); for (const match of content.matchAll(/\/api\/media\/([0-9a-f-]{36})/g)) ids.add(match[1]); for (const id of ids) refs.push({ id, purpose: "CONTENT" }); return refs; }
-  private async retire(id: string, actor: Actor, requestId: string, now: Date) { const asset = await this.repo.findMediaAssetById(id); if (!asset) return; await this.repo.unbindMedia(id); await this.storage.delete(asset.storageKey); await this.repo.softDeleteMedia(id, now); await this.repo.audit({ actorId: actor.userId, action: "MEDIA_DELETED", targetType: "MEDIA", targetId: id, requestId }); }
+  private async queueRetirement(id: string, actor: Actor, requestId: string, now: Date): Promise<MediaCleanupTask | null> { const asset = await this.requiredAsset(id); const deleted = await this.repo.softDeleteMedia(id, now); if (!deleted) return null; await this.repo.audit({ actorId: actor.userId, action: "MEDIA_DELETED", targetType: "MEDIA", targetId: id, requestId }); return { id: asset.id, storageKey: asset.storageKey }; }
 }
 
 export const mediaUrl = (id: string) => `/api/media/${id}`;

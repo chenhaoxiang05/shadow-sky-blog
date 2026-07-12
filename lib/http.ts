@@ -40,14 +40,16 @@ export function requestHandler<Args extends unknown[]>(
 ) {
   return async (request: Request, ...args: Args) => {
     let context;
+    let response: Response;
     try {
       context = contextFactory();
-      return await requestServices.run(createServices(context.db), () => handler(request, ...args));
+      response = await requestServices.run(createServices(context.db), () => handler(request, ...args));
     } catch (error) {
-      return errorResponse(error);
-    } finally {
-      await context?.close();
+      response = errorResponse(error);
     }
+    try { await context?.close(); }
+    catch { console.error("DATABASE_CONTEXT_CLOSE_FAILED"); }
+    return response;
   };
 }
 
