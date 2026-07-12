@@ -1,10 +1,24 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
+import { THEME_STORAGE_KEY } from "../lib/theme-transition";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const themeBootstrapScript = `(() => {
+  let theme = "dark";
+  try {
+    const stored = window.localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
+    theme = stored === "dark" || stored === "light"
+      ? stored
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  } catch {
+    theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+})();`;
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -22,5 +36,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN"><body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body></html>;
+  return (
+    <html lang="zh-CN" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script id="shadow-sky-theme-bootstrap" dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+    </html>
+  );
 }
