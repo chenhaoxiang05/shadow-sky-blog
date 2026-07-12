@@ -15,7 +15,10 @@
 - 嵌套评论、作者修改与软删除、Admin/Owner 管理、服务端 XSS 清理和频率限制。
 - 幂等点赞与收藏、“我的收藏”可见性复核、PostgreSQL 全文搜索与 `SearchProvider`。
 - PNG/JPEG/WebP/GIF 真实 MIME 校验、本地 `StorageProvider` 与 Azure Blob 适配边界。
+- 媒体记录持久化 `purpose`、所有者及用户/文章绑定；读取继承头像公开状态或文章可见性，受保护媒体禁止共享缓存。
 - 不暴露邮箱和权限策略的成员公开主页、公开文章数与获赞数。
+
+搜索支持 `q`、页码、受限 `pageSize`、分类、标签、作者和时间范围。可见性在 PostgreSQL 中先于分页执行，并按 `publishedAt + id` 稳定排序。
 
 邮件、邮箱验证、通知中心、实时聊天、私信、WebSocket、MFA 不在 Phase 3 范围；Azure 基础设施自动化和正式切流属于 Phase 4。
 

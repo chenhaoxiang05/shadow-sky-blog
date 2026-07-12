@@ -11,16 +11,17 @@ export class CommunityService {
 
   async listComments(actor: Actor, postId: string) {
     await this.readablePost(actor, postId);
-    return this.repo.listComments(postId);
+    return (await this.repo.listComments(postId)).map((comment) => comment.status === "VISIBLE" && !comment.deletedAt ? comment : { ...comment, body: comment.status === "HIDDEN" ? "此评论已被管理员隐藏" : "此评论已由作者删除" });
   }
 
   async createComment(actor: Actor, input: { postId: string; parentId?: string | null; body: string; requestId: string }, now = new Date()) {
     if (!hasRole(actor, "MEMBER")) throw new DomainError("UNAUTHENTICATED", "请先登录", 401);
     await this.readablePost(actor, input.postId);
     if (await this.repo.countRecentComments(actor.userId!, new Date(now.getTime() - COMMENT_WINDOW_MS)) >= COMMENT_LIMIT) throw new DomainError("RATE_LIMITED", "评论过于频繁，请稍后再试", 429);
-    if (input.parentId) { const parent = await this.repo.findCommentById(input.parentId); if (!parent || parent.postId !== input.postId || parent.status !== "VISIBLE" || parent.deletedAt) throw new DomainError("INVALID_INPUT", "回复目标无效", 400); }
+    let parentId = input.parentId ?? null; let depth = 0;
+    if (parentId) { const parent = await this.repo.findCommentById(parentId); if (!parent || parent.postId !== input.postId || parent.status !== "VISIBLE" || parent.deletedAt) throw new DomainError("INVALID_INPUT", "回复目标无效", 400); parentId = parent.depth === 0 ? parent.id : parent.parentId ?? null; depth = 1; if (!parentId) throw new DomainError("INVALID_INPUT", "回复层级无效", 400); }
     const body = cleanComment(input.body);
-    const comment = await this.repo.createComment({ postId: input.postId, authorId: actor.userId!, parentId: input.parentId, body }, now);
+    const comment = await this.repo.createComment({ postId: input.postId, authorId: actor.userId!, parentId, depth, body }, now);
     await this.repo.audit({ actorId: actor.userId, action: "COMMENT_CREATED", targetType: "COMMENT", targetId: comment.id, requestId: input.requestId, metadata: { postId: input.postId } });
     return comment;
   }
@@ -44,6 +45,16 @@ export class CommunityService {
     const updated = await this.repo.softDeleteComment(id, own ? "DELETED" : "HIDDEN", now);
     await this.repo.audit({ actorId: actor.userId, action: moderator && !own ? "COMMENT_MODERATED" : "COMMENT_DELETED", targetType: "COMMENT", targetId: id, requestId });
     return updated!;
+  }
+
+  async restoreComment(actor: Actor, id: string, requestId: string, now = new Date()) {
+    if (!hasRole(actor, "ADMIN")) throw new DomainError("FORBIDDEN", "权限不足", 403);
+    const comment = await this.repo.findCommentById(id);
+    if (!comment || comment.status !== "HIDDEN") throw new DomainError("NOT_FOUND", "可恢复的评论不存在", 404);
+    await this.readablePost(actor, comment.postId);
+    const restored = await this.repo.restoreComment(id, now); if (!restored) throw new DomainError("CONFLICT", "评论当前不能恢复", 409);
+    await this.repo.audit({ actorId: actor.userId, action: "COMMENT_RESTORED", targetType: "COMMENT", targetId: id, requestId });
+    return restored;
   }
 
   async setLike(actor: Actor, postId: string, active: boolean, requestId: string, now = new Date()) {

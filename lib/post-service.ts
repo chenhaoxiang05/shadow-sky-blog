@@ -2,13 +2,16 @@ import { canCreatePost, canDirectPublish, canEditPost, canHidePost, canReadPost,
 import { DomainError, type Actor, type PostRecord, type Visibility } from "./domain";
 import { renderSafeMarkdown, slugify } from "./content";
 import type { PostChanges, Repository } from "./repository";
+import type { MediaService } from "./media-service";
 
 export class PostService {
-  constructor(private repo: Repository) {}
+  constructor(private repo: Repository, private media?: MediaService) {}
 
   async create(actor: Actor, input: { title: string; slug?: string; summary: string; content: string; visibility: Visibility; coverImage?: string | null; categoryId?: string | null; tags?: string[]; requestId: string }, now = new Date()) {
     if (!canCreatePost(actor)) throw new DomainError("FORBIDDEN", "当前角色不能创建文章", 403);
+    await this.media?.validatePostMedia(actor, input.coverImage, input.content);
     const post = await this.repo.createPost({ authorId: actor.userId!, title: input.title.trim(), slug: slugify(input.slug || input.title), summary: input.summary.trim(), content: input.content, contentHtml: await renderSafeMarkdown(input.content), visibility: input.visibility, coverImage: input.coverImage, categoryId: input.categoryId, tags: normalizeTags(input.tags) }, now);
+    await this.media?.bindPostMedia(actor, post.id, post.coverImage, post.content, input.requestId, now);
     await this.repo.audit({ actorId: actor.userId, action: "POST_CREATED", targetType: "POST", targetId: post.id, requestId: input.requestId });
     return post;
   }
@@ -19,7 +22,9 @@ export class PostService {
     const changes: PostChanges = { ...input };
     delete (changes as PostChanges & { expectedRevision?: number }).expectedRevision; delete (changes as PostChanges & { requestId?: string }).requestId;
     if (changes.title) changes.title = changes.title.trim(); if (changes.slug) changes.slug = slugify(changes.slug); if (changes.content !== undefined) changes.contentHtml = await renderSafeMarkdown(changes.content); if (changes.tags) changes.tags = normalizeTags(changes.tags);
+    await this.media?.validatePostMedia(actor, changes.coverImage !== undefined ? changes.coverImage : post.coverImage, changes.content ?? post.content, post.id);
     const updated = await this.repo.updatePost(id, changes, input.expectedRevision, now); if (!updated) throw new DomainError("CONFLICT", "文章已被其他编辑更新，请刷新后重试", 409);
+    await this.media?.bindPostMedia(actor, updated.id, updated.coverImage, updated.content, input.requestId, now);
     await this.repo.audit({ actorId: actor.userId, action: "POST_UPDATED", targetType: "POST", targetId: id, requestId: input.requestId, metadata: { revision: updated.revision } });
     return updated;
   }

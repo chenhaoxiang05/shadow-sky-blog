@@ -9,7 +9,7 @@ import { LocalStorageProvider } from "./storage";
 import { assertCsrf, readCookie, SESSION_COOKIE } from "./security";
 import { ZodError } from "zod";
 
-export function services() { const repo = new PostgresRepository(); return { repo, auth: new AuthService(repo), posts: new PostService(repo), community: new CommunityService(repo), search: new SearchService(new PostgresSearchProvider(repo)), media: new MediaService(repo, new LocalStorageProvider()) }; }
+export function services() { const repo = new PostgresRepository(); const media = new MediaService(repo, new LocalStorageProvider()); return { repo, auth: new AuthService(repo), posts: new PostService(repo, media), community: new CommunityService(repo), search: new SearchService(new PostgresSearchProvider(repo)), media }; }
 export function assertPasswordChanged(user: { mustChangePassword: boolean }) { if (user.mustChangePassword) throw new DomainError("PASSWORD_CHANGE_REQUIRED", "必须先修改临时密码", 403); }
 export async function currentAuth(request: Request, options: { allowMustChangePassword?: boolean } = {}) { const { auth } = services(); const result = await auth.authenticate(readCookie(request, SESSION_COOKIE)); if (!options.allowMustChangePassword) assertPasswordChanged(result.user); return result; }
 export async function optionalActor(request: Request): Promise<Actor> { try { return (await currentAuth(request)).actor; } catch { return { role: "VISITOR", status: "ACTIVE", publishingPolicy: "REVIEW_REQUIRED" }; } }
