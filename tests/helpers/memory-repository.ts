@@ -7,6 +7,15 @@ export class MemoryRepository implements Repository {
   addUser(user: UserRecord) { this.users.set(user.id, user); return user; }
   addInvitation(invitation: InvitationRecord) { this.invitations.set(invitation.id, invitation); return invitation; }
   addPost(post: PostRecord) { this.posts.set(post.id, post); return post; }
+  async transaction<T>(work: (repository: Repository) => Promise<T>): Promise<T> {
+    const snapshot = {
+      users: structuredClone(this.users), invitations: structuredClone(this.invitations), sessions: structuredClone(this.sessions), posts: structuredClone(this.posts),
+      comments: structuredClone(this.comments), likes: structuredClone(this.likes), bookmarks: structuredClone(this.bookmarks), media: structuredClone(this.media),
+      audits: structuredClone(this.audits), failures: structuredClone(this.failures),
+    };
+    try { return await work(this); }
+    catch (error) { Object.assign(this, snapshot); throw error; }
+  }
   async findUserByLogin(login: string) { return [...this.users.values()].find((u) => !u.deletedAt && u.handle === login) ?? null; }
   async findUserById(id: string) { const user = this.users.get(id); return user && !user.deletedAt ? structuredClone(user) : null; }
   async listUsers() { return [...this.users.values()].filter((u) => !u.deletedAt).map((user) => { const safe: Partial<UserRecord> = structuredClone(user); delete safe.passwordHash; return safe as Omit<UserRecord, "passwordHash">; }); }
@@ -45,13 +54,16 @@ export class MemoryRepository implements Repository {
   async setLike(userId: string, postId: string, liked: boolean) { const key = `${userId}:${postId}`; if (liked) this.likes.add(key); else this.likes.delete(key); const post = this.posts.get(postId) as (PostRecord & { likeCount?: number }) | undefined; const likeCount = [...this.likes].filter((item) => item.endsWith(`:${postId}`)).length; if (post) post.likeCount = likeCount; return { active: this.likes.has(key), likeCount }; }
   async setBookmark(userId: string, postId: string, bookmarked: boolean) { const key = `${userId}:${postId}`; if (bookmarked) this.bookmarks.add(key); else this.bookmarks.delete(key); return this.bookmarks.has(key); }
   async listBookmarkedPosts(userId: string) { return structuredClone([...this.bookmarks].filter((key) => key.startsWith(`${userId}:`)).map((key) => this.posts.get(key.slice(userId.length + 1))).filter(Boolean) as PostRecord[]); }
-  async createMediaAsset(input: Omit<MediaAssetRecord, "id" | "createdAt" | "deletedAt" | "linkedUserId" | "linkedPostId"> & { purpose: MediaPurpose }) { const row: MediaAssetRecord = { id: crypto.randomUUID(), ...input, linkedUserId: null, linkedPostId: null, createdAt: new Date() }; this.media.set(row.id, row); return structuredClone(row); }
+  async createMediaAsset(input: Omit<MediaAssetRecord, "id" | "createdAt" | "deletedAt" | "linkedUserId" | "linkedPostId"> & { purpose: MediaPurpose }) { const row: MediaAssetRecord = { id: crypto.randomUUID(), cleanupStatus: "NONE", cleanupAttempts: 0, ...input, linkedUserId: null, linkedPostId: null, createdAt: new Date() }; this.media.set(row.id, row); return structuredClone(row); }
   async findMediaAssetById(id: string) { const row = this.media.get(id); return row && !row.deletedAt ? structuredClone(row) : null; }
   async listMediaAssetsForPost(postId: string) { return structuredClone([...this.media.values()].filter((row) => row.linkedPostId === postId && !row.deletedAt)); }
   async bindMediaToUser(id: string, userId: string) { const row = this.media.get(id); if (!row || row.deletedAt) return null; row.linkedUserId = userId; row.linkedPostId = null; return structuredClone(row); }
   async bindMediaToPost(id: string, postId: string) { const row = this.media.get(id); if (!row || row.deletedAt) return null; row.linkedPostId = postId; row.linkedUserId = null; return structuredClone(row); }
   async unbindMedia(id: string) { const row = this.media.get(id); if (!row || row.deletedAt) return null; row.linkedUserId = null; row.linkedPostId = null; return structuredClone(row); }
-  async softDeleteMedia(id: string, now: Date) { const row = this.media.get(id); if (!row || row.deletedAt) return null; row.deletedAt = now; row.linkedUserId = null; row.linkedPostId = null; return structuredClone(row); }
+  async softDeleteMedia(id: string, now: Date) { const row = this.media.get(id); if (!row || row.deletedAt) return null; Object.assign(row, { deletedAt: now, linkedUserId: null, linkedPostId: null, cleanupStatus: "PENDING", cleanupRequestedAt: now, cleanupCompletedAt: null, cleanupLastErrorCode: null }); return structuredClone(row); }
+  async listPendingMediaCleanup(limit = 100) { return structuredClone([...this.media.values()].filter((row) => row.cleanupStatus === "PENDING" && row.deletedAt && !row.linkedUserId && !row.linkedPostId).sort((a, b) => (a.cleanupRequestedAt?.getTime() ?? 0) - (b.cleanupRequestedAt?.getTime() ?? 0) || a.id.localeCompare(b.id)).slice(0, limit)); }
+  async markMediaCleanupCompleted(id: string, now: Date) { const row = this.media.get(id); if (!row || row.cleanupStatus !== "PENDING" || !row.deletedAt || row.linkedUserId || row.linkedPostId) return false; Object.assign(row, { cleanupStatus: "COMPLETED", cleanupCompletedAt: now, cleanupLastErrorCode: null }); return true; }
+  async recordMediaCleanupFailure(id: string, errorCode: string) { const row = this.media.get(id); if (!row || row.cleanupStatus !== "PENDING" || !row.deletedAt || row.linkedUserId || row.linkedPostId) return false; row.cleanupAttempts = (row.cleanupAttempts ?? 0) + 1; row.cleanupLastErrorCode = errorCode; return true; }
 }
 
 export function actor(id: string, role: Role, publishingPolicy: PublishingPolicy = "REVIEW_REQUIRED") { return { userId: id, role, publishingPolicy, status: "ACTIVE" as const }; }

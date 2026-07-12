@@ -1,8 +1,12 @@
 import { sql } from "drizzle-orm";
-import { getDb } from "@/db";
+import { withDatabase } from "@/db";
 import { json } from "@/lib/http";
 
 export async function GET() {
-  try { await getDb().execute(sql`select 1`); return json({ status: "ok", database: "reachable" }); }
-  catch { return json({ status: "degraded", database: "unavailable" }, { status: 503 }); }
+  try {
+    await withDatabase(async (db) => { await db.execute(sql`select 1`); });
+    return json({ status: "ok", database: "reachable" });
+  } catch {
+    return json({ status: "degraded", database: "unavailable", error: "DATABASE_UNAVAILABLE" }, { status: 503 });
+  }
 }

@@ -1,4 +1,4 @@
 import { z } from "zod";
-import { errorResponse, json, mutationAuth, requestId, services } from "@/lib/http";
+import { errorResponse, json, mutationAuth, requestHandler, requestId, services } from "@/lib/http";
 const schema = z.object({ active: z.boolean() });
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) { try { const { actor } = await mutationAuth(request); const { id } = await params; return json(await services().community.setBookmark(actor, id, schema.parse(await request.json()).active, requestId(request))); } catch (error) { return errorResponse(error); } }
+export const PUT = requestHandler(async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) { try { const { actor } = await mutationAuth(request); const { id } = await params; return json(await services().community.setBookmark(actor, id, schema.parse(await request.json()).active, requestId(request))); } catch (error) { return errorResponse(error); } });

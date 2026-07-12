@@ -1,17 +1,59 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { Pool, type PoolConfig } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema";
 
-let client: ReturnType<typeof postgres> | undefined;
-let database: ReturnType<typeof drizzle<typeof schema>> | undefined;
+export type Database = ReturnType<typeof drizzle<typeof schema>>;
+export type NeonPoolFactory = (config: PoolConfig) => Pool;
 
-export function getDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not configured");
-  if (!client) client = postgres(url, { max: Number(process.env.DATABASE_POOL_SIZE ?? 10), idle_timeout: 20, connect_timeout: 10, prepare: false });
-  if (!database) database = drizzle(client, { schema });
-  return database;
+export interface DatabaseContext {
+  db: Database;
+  close(): Promise<void>;
 }
 
-export async function closeDb() { if (client) await client.end(); client = undefined; database = undefined; }
+export class DatabaseConfigurationError extends Error {
+  readonly code = "DATABASE_NOT_CONFIGURED";
+
+  constructor() {
+    super("Database configuration is unavailable");
+    this.name = "DatabaseConfigurationError";
+  }
+}
+
+function requestPoolSize() {
+  const configured = Number(process.env.DATABASE_POOL_SIZE ?? 1);
+  return Number.isInteger(configured) && configured > 0 ? Math.min(configured, 10) : 1;
+}
+
+export function createDatabaseContext(options: { url?: string; poolFactory?: NeonPoolFactory } = {}): DatabaseContext {
+  const url = options.url ?? process.env.DATABASE_URL;
+  if (!url) throw new DatabaseConfigurationError();
+
+  const pool = (options.poolFactory ?? ((config) => new Pool(config)))({
+    connectionString: url,
+    max: requestPoolSize(),
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 20_000,
+  });
+  const db = drizzle(pool, { schema });
+  let closed = false;
+
+  return {
+    db,
+    async close() {
+      if (closed) return;
+      closed = true;
+      await pool.end();
+    },
+  };
+}
+
+export async function withDatabase<T>(work: (db: Database) => Promise<T>) {
+  const context = createDatabaseContext();
+  try {
+    return await work(context.db);
+  } finally {
+    await context.close();
+  }
+}
+
 export * from "./schema";

@@ -24,7 +24,7 @@
 
 ## 技术栈
 
-React 19、Next.js 风格 App Router、TypeScript、Vinext、PostgreSQL、Drizzle ORM、`postgres` 驱动、Zod、`@noble/hashes` Argon2id、Marked 与 sanitize-html。
+React 19、Next.js 风格 App Router、TypeScript、Vinext、PostgreSQL、Drizzle ORM、`@neondatabase/serverless` WebSocket 驱动、Zod、`@noble/hashes` Argon2id、Marked 与 sanitize-html。Sites/Workers 运行时按请求创建 Neon 数据库上下文，并在响应完成前关闭连接；交互式事务继续由 `drizzle-orm/neon-serverless` 执行。
 
 ## 本地运行
 
@@ -39,12 +39,15 @@ React 19、Next.js 风格 App Router、TypeScript、Vinext、PostgreSQL、Drizzl
 
 关键变量包括 `DATABASE_URL`、`SESSION_SECRET`、`PASSWORD_PEPPER`、`APP_URL`、`DATABASE_POOL_SIZE` 和 `AUDIT_RETENTION_DAYS`。Owner 初始化只使用 `SEED_OWNER_HANDLE`、`SEED_OWNER_DISPLAY_NAME` 和 `SEED_OWNER_PASSWORD`；源码和迁移中不包含固定密码。
 
+媒体上传由 `MEDIA_UPLOAD_ENABLED` 显式控制，默认 `false`。本地开发在确认 `UPLOAD_ROOT` 可持久保存后可以设为 `true`；Sites 预览在接入持久对象存储前必须保持关闭，不能把 Worker 本地文件系统视为跨请求存储。
+
 Owner 密码只能通过服务器维护命令 `npm run owner:reset-password` 重置，并从运行环境读取 `OWNER_RESET_PASSWORD`。
 
 ## 数据库
 
 - 生成迁移：`npm run db:generate`
 - 执行迁移：`npm run db:migrate`
+- 重试已提交的媒体物理清理：`npm run media:prune`
 - 幂等初始化：`npm run db:seed`
 
 详见 `DATABASE.md`。
