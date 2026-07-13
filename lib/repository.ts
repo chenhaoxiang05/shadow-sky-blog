@@ -4,7 +4,12 @@ export type SessionWithUser = { session: SessionRecord; user: UserRecord };
 export type NewPost = Pick<PostRecord, "authorId" | "title" | "slug" | "summary" | "content" | "contentHtml" | "visibility"> & { coverImage?: string | null; categoryId?: string | null; tags?: string[] };
 export type PostChanges = Partial<Pick<PostRecord, "title" | "slug" | "summary" | "content" | "contentHtml" | "coverImage" | "categoryId" | "tags" | "visibility">>;
 export type SearchInput = { actor: Actor; q?: string; page: number; pageSize: number; category?: string; tag?: string; author?: string; from?: Date; to?: Date };
-export type SearchPage = { posts: PostRecord[]; total: number; page: number; pageSize: number; nextPage: number | null };
+export type SearchPostProjection = Pick<PostRecord, "id" | "authorId" | "title" | "summary" | "tags" | "status" | "visibility" | "publishedAt" | "deletedAt"> & {
+  authorDisplayName: string;
+  authorHandle: string;
+  readTimeMinutes: number;
+};
+export type SearchPage = { posts: SearchPostProjection[]; total: number; page: number; pageSize: number; nextPage: number | null };
 
 export interface Repository {
   transaction<T>(work: (repository: Repository) => Promise<T>): Promise<T>;

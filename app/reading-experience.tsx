@@ -15,9 +15,9 @@ import {
   type ReadingHeading,
 } from "@/lib/reading-experience";
 
-type Props = { articleRef: RefObject<HTMLElement | null>; active: boolean };
+type Props = { articleRef: RefObject<HTMLElement | null>; active: boolean; articleKey: string };
 
-export function ReadingExperience({ articleRef, active }: Props) {
+export function ReadingExperience({ articleRef, active, articleKey }: Props) {
   const [headings, setHeadings] = useState<ReadingHeading[]>([]);
   const [activeId, setActiveId] = useState("");
   const [progress, setProgress] = useState(0);
@@ -101,7 +101,7 @@ export function ReadingExperience({ articleRef, active }: Props) {
       window.removeEventListener("resize", scheduleLayoutUpdate);
       window.removeEventListener("orientationchange", scheduleLayoutUpdate);
     };
-  }, [active, articleRef]);
+  }, [active, articleKey, articleRef]);
 
   if (!active) return null;
 
