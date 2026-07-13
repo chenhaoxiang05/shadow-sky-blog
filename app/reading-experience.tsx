@@ -4,8 +4,11 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   calculateReadingEnd,
   calculateReadingProgress,
+  createPostLayoutActionScheduler,
   createReadingFrameScheduler,
   findActiveReadingHeading,
+  readingScrollBehavior,
+  scheduleReadingHeadingNavigation,
   slugifyReadingHeading,
   uniqueReadingHeadingId,
   type HeadingPosition,
@@ -22,6 +25,14 @@ export function ReadingExperience({ articleRef, active }: Props) {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const positionsRef = useRef<HeadingPosition[]>([]);
   const activeIdRef = useRef("");
+  const [headingNavigationScheduler] = useState(() => createPostLayoutActionScheduler({
+    requestFrame: (callback) => window.requestAnimationFrame(callback),
+    cancelFrame: (frame) => window.cancelAnimationFrame(frame),
+  }));
+
+  useEffect(() => {
+    return () => headingNavigationScheduler.dispose();
+  }, [headingNavigationScheduler]);
 
   useEffect(() => {
     if (!active) return;
@@ -99,13 +110,18 @@ export function ReadingExperience({ articleRef, active }: Props) {
   }
 
   function goToHeading(id: string) {
-    const heading = articleRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
-    if (!heading) return;
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${encodeURIComponent(id)}`);
-    heading.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
     activeIdRef.current = id;
     setActiveId(id);
-    setTocOpen(false);
+    scheduleReadingHeadingNavigation(
+      () => setTocOpen(false),
+      headingNavigationScheduler,
+      () => {
+        const heading = articleRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+        if (!heading) return;
+        heading.scrollIntoView({ behavior: readingScrollBehavior(prefersReducedMotion()), block: "start" });
+      },
+    );
   }
 
   function backToTop() {

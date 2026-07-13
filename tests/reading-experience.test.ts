@@ -3,8 +3,11 @@ import test from "node:test";
 import {
   calculateReadingEnd,
   calculateReadingProgress,
+  createPostLayoutActionScheduler,
   createReadingFrameScheduler,
   findActiveReadingHeading,
+  readingScrollBehavior,
+  scheduleReadingHeadingNavigation,
   slugifyReadingHeading,
   uniqueReadingHeadingId,
 } from "../lib/reading-experience";
@@ -82,4 +85,56 @@ test("viewport 重排会先重新测量标题位置再更新目录高亮", () =>
   assert.equal(activeId, "two");
   assert.deepEqual(cancelled, [1]);
   scheduler.dispose();
+});
+
+test("移动目录先折叠并等待布局提交后再滚动到重新定位的章节", () => {
+  let tocOpen = true;
+  let pendingFrame: (() => void) | undefined;
+  let frameId = 0;
+  let scrolledTop = 0;
+  const cancelled: number[] = [];
+  const scheduler = createPostLayoutActionScheduler({
+    requestFrame(callback) {
+      pendingFrame = callback;
+      return ++frameId;
+    },
+    cancelFrame(frame) {
+      cancelled.push(frame);
+    },
+  });
+
+  scheduleReadingHeadingNavigation(
+    () => { tocOpen = false; },
+    scheduler,
+    () => { scrolledTop = tocOpen ? 900 : 600; },
+  );
+
+  assert.equal(tocOpen, false);
+  assert.equal(scrolledTop, 0);
+  pendingFrame?.();
+  assert.equal(scrolledTop, 600);
+
+  let firstRan = false;
+  let secondRan = false;
+  scheduleReadingHeadingNavigation(() => {}, scheduler, () => { firstRan = true; });
+  const staleFrame = pendingFrame;
+  scheduleReadingHeadingNavigation(() => {}, scheduler, () => { secondRan = true; });
+  const latestFrame = pendingFrame;
+  staleFrame?.();
+  latestFrame?.();
+  assert.equal(firstRan, false);
+  assert.equal(secondRan, true);
+  assert.deepEqual(cancelled, [2]);
+
+  scheduleReadingHeadingNavigation(() => {}, scheduler, () => { secondRan = false; });
+  const unmountedFrame = pendingFrame;
+  scheduler.dispose();
+  unmountedFrame?.();
+  assert.equal(secondRan, true);
+  assert.deepEqual(cancelled, [2, 4]);
+});
+
+test("章节跳转遵守 reduced-motion 偏好", () => {
+  assert.equal(readingScrollBehavior(true), "auto");
+  assert.equal(readingScrollBehavior(false), "smooth");
 });

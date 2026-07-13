@@ -8,6 +8,48 @@ type ReadingFrameSchedulerOptions = {
   updateState: () => void;
 };
 
+type PostLayoutActionSchedulerOptions = {
+  requestFrame: (callback: () => void) => number;
+  cancelFrame: (frame: number) => void;
+};
+
+export function createPostLayoutActionScheduler({ requestFrame, cancelFrame }: PostLayoutActionSchedulerOptions) {
+  let frame = 0;
+  let generation = 0;
+
+  function schedule(action: () => void) {
+    generation += 1;
+    const scheduledGeneration = generation;
+    if (frame) cancelFrame(frame);
+    frame = requestFrame(() => {
+      if (scheduledGeneration !== generation) return;
+      frame = 0;
+      action();
+    });
+  }
+
+  function dispose() {
+    generation += 1;
+    if (frame) cancelFrame(frame);
+    frame = 0;
+  }
+
+  return { schedule, dispose };
+}
+
+export function scheduleReadingHeadingNavigation(
+  collapseToc: () => void,
+  scheduler: { schedule: (action: () => void) => void },
+  navigate: () => void,
+) {
+  collapseToc();
+  scheduler.schedule(navigate);
+}
+
+export function readingScrollBehavior(reducedMotion: boolean): ScrollBehavior {
+  return reducedMotion ? "auto" : "smooth";
+}
+
 export function createReadingFrameScheduler({
   requestFrame,
   cancelFrame,
