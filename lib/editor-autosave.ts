@@ -12,6 +12,12 @@ export type EditorDraftScope = {
   draftId: string;
 };
 
+export type EditorAsyncTarget = {
+  userId: string | null;
+  draftId: string;
+  generation: number;
+};
+
 export type StoredEditorDraft = {
   version: 2;
   userId: string;
@@ -36,8 +42,8 @@ export function editorDraftStorageKey(userId: string, draftId: string) {
   return `${prefix}${encodeURIComponent(scope.userId)}:${encodeURIComponent(scope.draftId)}`;
 }
 
-function bounded(value: unknown, max: number) {
-  return typeof value === "string" && value.length <= max ? value : null;
+function localString(value: unknown) {
+  return typeof value === "string" ? value : null;
 }
 
 export function parseStoredEditorDraft(raw: string | null, expectedUserId: string, expectedDraftId: string): StoredEditorDraft | null {
@@ -50,11 +56,11 @@ export function parseStoredEditorDraft(raw: string | null, expectedUserId: strin
     if (record.version !== 2 || record.userId !== scope.userId || record.draftId !== scope.draftId || typeof record.savedAt !== "string") return null;
     if (!record.fields || typeof record.fields !== "object") return null;
     const fields = record.fields as Record<string, unknown>;
-    const title = bounded(fields.title, 180);
-    const summary = bounded(fields.summary, 500);
-    const content = bounded(fields.content, 500_000);
-    const tags = bounded(fields.tags, 500);
-    const coverImage = bounded(fields.coverImage, 2_048);
+    const title = localString(fields.title);
+    const summary = localString(fields.summary);
+    const content = localString(fields.content);
+    const tags = localString(fields.tags);
+    const coverImage = localString(fields.coverImage);
     const visibility = fields.visibility;
     if (title === null || summary === null || content === null || tags === null || coverImage === null) return null;
     if (visibility !== "PUBLIC" && visibility !== "MEMBERS_ONLY" && visibility !== "PRIVATE") return null;
@@ -113,12 +119,46 @@ export function removeEditorDraft(storage: DraftStorage, scope: EditorDraftScope
   storage.removeItem(editorDraftStorageKey(scope.userId, scope.draftId));
 }
 
+export function removeEditorDraftIfFieldsMatch(storage: DraftStorage, scope: EditorDraftScope, savedFields: EditorDraftFields) {
+  const current = readEditorDraft(storage, scope);
+  if (!current || !editorDraftFieldsEqual(current.fields, savedFields)) return false;
+  removeEditorDraft(storage, scope);
+  return true;
+}
+
 export function appendContentImage(fields: EditorDraftFields, mediaUrl: string): EditorDraftFields {
   return { ...fields, content: `${fields.content}\n\n![图片](${mediaUrl})` };
 }
 
 export function editorDraftCanEdit(input: { identityResolved: boolean; userId: string | null; recoveryChecked: boolean; recoveryPending: boolean }) {
   return input.identityResolved && Boolean(input.userId) && input.recoveryChecked && !input.recoveryPending;
+}
+
+export function editorAsyncTargetMatches(active: EditorAsyncTarget, started: EditorAsyncTarget) {
+  return Boolean(started.userId)
+    && active.userId === started.userId
+    && active.draftId === started.draftId
+    && active.generation === started.generation;
+}
+
+export function editorAsyncCompletionIsCurrent(
+  active: EditorAsyncTarget,
+  started: EditorAsyncTarget,
+  activeOperationId: number,
+  startedOperationId: number,
+) {
+  return activeOperationId === startedOperationId && editorAsyncTargetMatches(active, started);
+}
+
+export function applyEditorMediaResult(
+  active: EditorAsyncTarget,
+  started: EditorAsyncTarget,
+  fields: EditorDraftFields,
+  purpose: "COVER" | "CONTENT",
+  mediaUrl: string,
+) {
+  if (!editorAsyncTargetMatches(active, started)) return null;
+  return purpose === "CONTENT" ? appendContentImage(fields, mediaUrl) : { ...fields, coverImage: mediaUrl };
 }
 
 export function serverSaveContainsLatestFields(current: EditorDraftFields, submitted: EditorDraftFields) {

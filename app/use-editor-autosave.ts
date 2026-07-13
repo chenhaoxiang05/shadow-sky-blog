@@ -7,6 +7,7 @@ import {
   flushPendingEditorDraft,
   readEditorDraft,
   removeEditorDraft,
+  removeEditorDraftIfFieldsMatch,
   writeEditorDraftIfChanged,
   type EditorDraftFields,
   type EditorDraftScope,
@@ -150,10 +151,10 @@ export function useEditorAutosave(input: {
     }
   }
 
-  function clearAfterServerSave() {
+  function clearAfterServerSave(savedFields: EditorDraftFields) {
     if (!scope) return;
     try {
-      removeEditorDraft(window.localStorage, scope);
+      removeEditorDraftIfFieldsMatch(window.localStorage, scope, savedFields);
       if (activeDraftRef.current?.key === currentScopeKey) activeDraftRef.current.dirty = false;
       setRecovery(null);
       setSavedAt(null);

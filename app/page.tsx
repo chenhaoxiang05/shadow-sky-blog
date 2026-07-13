@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useEditorAutosave } from "./use-editor-autosave";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
 import {
-  appendContentImage,
+  applyEditorMediaResult,
+  editorAsyncCompletionIsCurrent,
   editorDraftCanEdit,
   serverSaveContainsLatestFields,
+  type EditorAsyncTarget,
   type EditorDraftFields,
 } from "@/lib/editor-autosave";
 
@@ -69,6 +71,8 @@ export default function Home() {
   const [commentBody, setCommentBody] = useState("");
   const [editorForm, setEditorForm] = useState<EditorDraftFields>(initialEditorForm);
   const editorFormRef = useRef<EditorDraftFields>(initialEditorForm);
+  const editorAsyncTargetRef = useRef<EditorAsyncTarget>({ userId: null, draftId: "new", generation: 0 });
+  const editorOperationRef = useRef(0);
   const [editorDraftId, setEditorDraftId] = useState("new");
   const [editorDirty, setEditorDirty] = useState(false);
   const [saveState, setSaveState] = useState("尚未保存");
@@ -111,13 +115,17 @@ export default function Home() {
     let active = true;
     fetch("/api/auth/session", { credentials: "include" }).then(async (response) => response.ok ? response.json() : null).then((data) => {
       if (!active) return;
-      setEditorUserId(typeof data?.user?.id === "string" ? data.user.id : null);
+      const userId = typeof data?.user?.id === "string" ? data.user.id : null;
+      editorOperationRef.current += 1;
+      editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId, generation: editorAsyncTargetRef.current.generation + 1 };
+      setEditorUserId(userId);
       if (data?.user?.role === "OWNER" || data?.user?.role === "ADMIN") setOperatorRole(data.user.role);
-    }).catch(() => { if (active) setEditorUserId(null); }).finally(() => { if (active) setEditorIdentityResolved(true); });
+    }).catch(() => { if (active) { editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId: null, generation: editorAsyncTargetRef.current.generation + 1 }; setEditorUserId(null); } }).finally(() => { if (active) setEditorIdentityResolved(true); });
     return () => { active = false; };
   }, []);
 
   function navigate(next: View) {
+    if (view === "editor" && next !== "editor") { editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, generation: editorAsyncTargetRef.current.generation + 1 }; setBusy(false); }
     setView(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -126,10 +134,13 @@ export default function Home() {
   }
 
   function openEditor(draftId: string) {
+    editorOperationRef.current += 1;
+    editorAsyncTargetRef.current = { userId: editorAsyncTargetRef.current.userId, draftId, generation: editorAsyncTargetRef.current.generation + 1 };
     setEditorDraftId(draftId);
     editorFormRef.current = initialEditorForm;
     setEditorForm(initialEditorForm);
     setEditorDirty(false);
+    setBusy(false);
     setSaveState("尚未保存");
     navigate("editor");
   }
@@ -166,13 +177,68 @@ export default function Home() {
     if (!response.ok) { if (response.status === 401) notify("登录状态已失效，请重新登录"); throw new Error(data?.error?.message ?? "请求失败，请稍后重试"); }
     return data;
   }
-  async function submitLogin(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify(loginForm) }); setEditorUserId(typeof data.user.id === "string" ? data.user.id : null); setEditorIdentityResolved(true); if (data.user.role === "OWNER" || data.user.role === "ADMIN") setOperatorRole(data.user.role); if (data.user.mustChangePassword) { notify("请先修改管理员设置的临时密码"); navigate("changePassword"); } else { notify("登录成功"); navigate("studio"); } } catch (error) { notify(error instanceof Error ? error.message : "登录失败"); } finally { setBusy(false); } }
+  async function submitLogin(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify(loginForm) }); const userId = typeof data.user.id === "string" ? data.user.id : null; editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId, generation: editorAsyncTargetRef.current.generation + 1 }; setEditorUserId(userId); setEditorIdentityResolved(true); if (data.user.role === "OWNER" || data.user.role === "ADMIN") setOperatorRole(data.user.role); if (data.user.mustChangePassword) { notify("请先修改管理员设置的临时密码"); navigate("changePassword"); } else { notify("登录成功"); navigate("studio"); } } catch (error) { notify(error instanceof Error ? error.message : "登录失败"); } finally { setBusy(false); } }
   async function submitInvite(event: FormEvent) { event.preventDefault(); setBusy(true); try { await api("/api/auth/invite", { method: "POST", body: JSON.stringify(inviteForm) }); notify("注册成功，请使用新账户登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "邀请无效"); } finally { setBusy(false); } }
-  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); setEditorUserId(null); setEditorIdentityResolved(true); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
+  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId: null, generation: editorAsyncTargetRef.current.generation + 1 }; setEditorUserId(null); setEditorIdentityResolved(true); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
   async function createAdminInvitation(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/admin/invitations", { method: "POST", body: JSON.stringify(adminInviteForm) }); setGeneratedInviteLink(data.inviteLink); notify("一次性邀请已生成"); } catch (error) { notify(error instanceof Error ? error.message : "创建邀请失败"); } finally { setBusy(false); } }
   async function resetUserPassword(userId: string) { setBusy(true); try { const data = await api("/api/admin/users/reset-password", { method: "POST", body: JSON.stringify({ userId }) }); setTemporaryPassword(data.temporaryPassword); notify("临时密码已生成，旧 Session 已撤销"); } catch (error) { notify(error instanceof Error ? error.message : "重置失败"); } finally { setBusy(false); } }
-  async function uploadImage(file: File, purpose: "AVATAR" | "COVER" | "CONTENT") { const form = new FormData(); form.set("file", file); form.set("purpose", purpose); setBusy(true); try { const data = await api("/api/media", { method: "POST", body: form }); if (purpose === "AVATAR") await api("/api/profile", { method: "PATCH", body: JSON.stringify({ avatarKey: data.asset.url }) }); if (purpose === "COVER") updateEditorField("coverImage", data.asset.url); if (purpose === "CONTENT") { setEditorForm((current) => { const next = appendContentImage(current, data.asset.url); editorFormRef.current = next; return next; }); setEditorDirty(true); setSaveState("有未保存的修改"); } notify("图片已安全上传"); } catch (error) { notify(error instanceof Error ? error.message : "上传失败"); } finally { setBusy(false); } }
-  async function createDraft(action: "SAVE" | "SUBMIT") { const submitted = { ...editorFormRef.current }; setBusy(true); setSaveState("正在保存…"); try { const data = await api("/api/posts", { method: "POST", body: JSON.stringify({ title: submitted.title, summary: submitted.summary, content: submitted.content, visibility: submitted.visibility, coverImage: submitted.coverImage || null, tags: submitted.tags.split(",").map((tag) => tag.trim()).filter(Boolean) }) }); if (action === "SUBMIT") await api(`/api/posts/${data.post.id}/actions`, { method: "POST", body: JSON.stringify({ action: "SUBMIT" }) }); const latest = editorFormRef.current; if (serverSaveContainsLatestFields(latest, submitted)) { localDraft.clearAfterServerSave(); setEditorDirty(false); setSaveState(action === "SUBMIT" ? "已提交审核" : "草稿已安全保存"); notify(action === "SUBMIT" ? "文章已提交审核" : "草稿已保存"); } else { localDraft.persistNow(latest); setEditorDirty(true); setSaveState("服务器已保存较早版本，本地仍有未保存修改"); notify("服务器已保存较早版本，本地修改仍保留"); } } catch (error) { localDraft.persistNow(editorFormRef.current); setSaveState("保存失败，本地草稿仍保留"); notify(error instanceof Error ? error.message : "保存失败"); } finally { setBusy(false); } }
+  async function uploadImage(file: File, purpose: "AVATAR" | "COVER" | "CONTENT") {
+    const started = { ...editorAsyncTargetRef.current };
+    const operationId = ++editorOperationRef.current;
+    const isCurrent = () => purpose === "AVATAR"
+      ? editorOperationRef.current === operationId
+      : editorAsyncCompletionIsCurrent(editorAsyncTargetRef.current, started, editorOperationRef.current, operationId);
+    const form = new FormData(); form.set("file", file); form.set("purpose", purpose); setBusy(true);
+    try {
+      const data = await api("/api/media", { method: "POST", body: form });
+      if (purpose === "AVATAR") {
+        await api("/api/profile", { method: "PATCH", body: JSON.stringify({ avatarKey: data.asset.url }) });
+      } else {
+        if (!isCurrent()) return;
+        setEditorForm((current) => {
+          if (!isCurrent()) return current;
+          const next = applyEditorMediaResult(editorAsyncTargetRef.current, started, current, purpose, data.asset.url);
+          if (!next) return current;
+          editorFormRef.current = next;
+          return next;
+        });
+        setEditorDirty(true);
+        setSaveState("有未保存的修改");
+      }
+      if (isCurrent()) notify("图片已安全上传");
+    } catch (error) { if (isCurrent()) notify(error instanceof Error ? error.message : "上传失败"); } finally { if (isCurrent()) setBusy(false); }
+  }
+
+  async function createDraft(action: "SAVE" | "SUBMIT") {
+    const started = { ...editorAsyncTargetRef.current };
+    const operationId = ++editorOperationRef.current;
+    const isCurrent = () => editorAsyncCompletionIsCurrent(editorAsyncTargetRef.current, started, editorOperationRef.current, operationId);
+    const submitted = { ...editorFormRef.current };
+    setBusy(true); setSaveState("正在保存…");
+    try {
+      const data = await api("/api/posts", { method: "POST", body: JSON.stringify({ title: submitted.title, summary: submitted.summary, content: submitted.content, visibility: submitted.visibility, coverImage: submitted.coverImage || null, tags: submitted.tags.split(",").map((tag) => tag.trim()).filter(Boolean) }) });
+      if (action === "SUBMIT") await api(`/api/posts/${data.post.id}/actions`, { method: "POST", body: JSON.stringify({ action: "SUBMIT" }) });
+      if (!isCurrent()) return;
+      const latest = editorFormRef.current;
+      if (serverSaveContainsLatestFields(latest, submitted)) {
+        localDraft.clearAfterServerSave(submitted);
+        setEditorDirty(false);
+        setSaveState(action === "SUBMIT" ? "已提交审核" : "草稿已安全保存");
+        notify(action === "SUBMIT" ? "文章已提交审核" : "草稿已保存");
+      } else {
+        localDraft.persistNow(latest);
+        setEditorDirty(true);
+        setSaveState("服务器已保存较早版本，本地仍有未保存修改");
+        notify("服务器已保存较早版本，本地修改仍保留");
+      }
+    } catch (error) {
+      if (isCurrent()) {
+        localDraft.persistNow(editorFormRef.current);
+        setSaveState("保存失败，本地草稿仍保留");
+        notify(error instanceof Error ? error.message : "保存失败");
+      }
+    } finally { if (isCurrent()) setBusy(false); }
+  }
 
   return (
     <div className={`site ${theme}`}>

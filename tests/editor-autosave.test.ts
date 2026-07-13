@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  applyEditorMediaResult,
   appendContentImage,
   createStoredEditorDraft,
+  editorAsyncCompletionIsCurrent,
+  editorAsyncTargetMatches,
   editorDraftCanEdit,
   editorDraftScope,
   editorDraftStorageKey,
@@ -10,6 +13,7 @@ import {
   parseStoredEditorDraft,
   readEditorDraft,
   removeEditorDraft,
+  removeEditorDraftIfFieldsMatch,
   serverSaveContainsLatestFields,
   writeEditorDraft,
   writeEditorDraftIfChanged,
@@ -80,9 +84,16 @@ test("解析只投影用户作用域和编辑字段，不保留 Session 或敏�
   assert.equal(JSON.stringify(parsed).includes("ignored"), false);
 });
 
-test("超限内容和无效可见性不会进入编辑器", () => {
+test("本应用写入的超服务端长度草稿仍可完整恢复", () => {
+  const storage = new MemoryStorage();
+  const overServerLimit = { ...fields, title: "长".repeat(181), summary: "摘要".repeat(251), tags: "标签,".repeat(251) };
+  writeEditorDraft(storage, scope, overServerLimit);
+  assert.deepEqual(readEditorDraft(storage, scope)?.fields, overServerLimit);
+});
+
+test("字段类型损坏和无效可见性不会进入编辑器", () => {
   const stored = createStoredEditorDraft(scope, fields);
-  assert.equal(parseStoredEditorDraft(JSON.stringify({ ...stored, fields: { ...fields, title: "x".repeat(181) } }), userOne, "new"), null);
+  assert.equal(parseStoredEditorDraft(JSON.stringify({ ...stored, fields: { ...fields, title: 181 } }), userOne, "new"), null);
   assert.equal(parseStoredEditorDraft(JSON.stringify({ ...stored, fields: { ...fields, visibility: "OWNER_ONLY" } }), userOne, "new"), null);
 });
 
@@ -138,4 +149,45 @@ test("正式保存或放弃恢复可以幂等清理当前用户的本地草稿",
   removeEditorDraft(storage, scope);
   removeEditorDraft(storage, scope);
   assert.equal(readEditorDraft(storage, scope), null);
+});
+
+test("服务器保存完成只清理与提交快照匹配的本地版本", () => {
+  const storage = new MemoryStorage();
+  const submitted = { ...fields, content: "标签页一提交快照" };
+  const newerTabDraft = { ...fields, content: "标签页二稍后写入的新内容" };
+  writeEditorDraft(storage, scope, submitted);
+  writeEditorDraft(storage, scope, newerTabDraft);
+  assert.equal(removeEditorDraftIfFieldsMatch(storage, scope, submitted), false);
+  assert.deepEqual(readEditorDraft(storage, scope)?.fields, newerTabDraft);
+  assert.equal(removeEditorDraftIfFieldsMatch(storage, scope, newerTabDraft), true);
+  assert.equal(readEditorDraft(storage, scope), null);
+});
+
+test("保存请求完成前切换用户、草稿或 generation 会使回调失效", () => {
+  const started = { userId: userOne, draftId: "post-a", generation: 4 };
+  assert.equal(editorAsyncTargetMatches({ ...started }, started), true);
+  assert.equal(editorAsyncTargetMatches({ ...started, draftId: "post-b" }, started), false);
+  assert.equal(editorAsyncTargetMatches({ ...started, userId: userTwo }, started), false);
+  assert.equal(editorAsyncTargetMatches({ ...started, generation: 5 }, started), false);
+  assert.equal(editorAsyncCompletionIsCurrent(started, started, 8, 8), true);
+  assert.equal(editorAsyncCompletionIsCurrent(started, started, 9, 8), false);
+});
+
+test("旧保存 finally 不能覆盖同一草稿中新操作的 busy 状态", () => {
+  const target = { userId: userOne, draftId: "post-a", generation: 4 };
+  const oldOperationId = 12;
+  const newOperationId = 13;
+  assert.equal(editorAsyncCompletionIsCurrent(target, target, newOperationId, oldOperationId), false);
+  assert.equal(editorAsyncCompletionIsCurrent(target, target, newOperationId, newOperationId), true);
+});
+
+test("媒体上传结果只应用到启动时的草稿并保留最新输入", () => {
+  const started = { userId: userOne, draftId: "post-a", generation: 4 };
+  const switched = { ...started, draftId: "post-b", generation: 5 };
+  const latest = { ...fields, content: "上传期间继续输入" };
+  assert.equal(applyEditorMediaResult(switched, started, latest, "CONTENT", "/api/media/image"), null);
+  const applied = applyEditorMediaResult(started, started, latest, "CONTENT", "/api/media/image");
+  assert.match(applied?.content ?? "", /上传期间继续输入/);
+  assert.match(applied?.content ?? "", /!\[图片\]\(\/api\/media\/image\)$/);
+  assert.equal(applyEditorMediaResult(switched, started, latest, "COVER", "/api/media/cover"), null);
 });
