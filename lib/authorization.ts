@@ -30,7 +30,7 @@ export function canResetPassword(actor: Actor, target: ManagedTarget) {
   return canManageTarget(actor, target);
 }
 
-export function canReadPost(actor: Actor, post: PostRecord) {
+export function canReadPost(actor: Actor, post: Pick<PostRecord, "authorId" | "status" | "visibility" | "deletedAt">) {
   if (post.deletedAt || post.status === "DELETED") return hasRole(actor, "ADMIN") || actor.userId === post.authorId;
   if (post.status === "HIDDEN") return hasRole(actor, "ADMIN") || actor.userId === post.authorId;
   if (post.visibility === "PRIVATE") return hasRole(actor, "ADMIN") || actor.userId === post.authorId;
