@@ -9,6 +9,7 @@ import {
   paletteShortcutAction,
   readSearchPosts,
   shouldChoosePaletteItem,
+  shouldMovePaletteSelection,
   type PaletteDestination,
   type SearchPost,
 } from "@/lib/command-palette";
@@ -145,7 +146,7 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
       close();
       return;
     }
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (shouldMovePaletteSelection({ key: event.key, isComposing: event.nativeEvent.isComposing })) {
       event.preventDefault();
       setActiveIndex((current) => movePaletteIndex(current, event.key === "ArrowDown" ? 1 : -1, items.length));
       return;

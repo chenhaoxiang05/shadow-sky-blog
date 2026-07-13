@@ -295,3 +295,7 @@ export function paletteShortcutAction(open: boolean, event: Pick<KeyboardEvent, 
 export function shouldChoosePaletteItem(event: { key: string; isComposing: boolean; inputFocused: boolean }) {
   return event.key === "Enter" && event.inputFocused && !event.isComposing;
 }
+
+export function shouldMovePaletteSelection(event: { key: string; isComposing: boolean }) {
+  return !event.isComposing && (event.key === "ArrowDown" || event.key === "ArrowUp");
+}

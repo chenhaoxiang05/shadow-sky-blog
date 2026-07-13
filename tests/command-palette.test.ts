@@ -15,6 +15,7 @@ import {
   selectCatalogArticle,
   selectSearchArticle,
   shouldChoosePaletteItem,
+  shouldMovePaletteSelection,
   submitArticleComment,
   toggleArticleInteraction,
   updateArticleCommentDraft,
@@ -181,6 +182,14 @@ test("IME 组合输入期间 Enter 不选择结果", () => {
   assert.equal(shouldChoosePaletteItem({ key: "Enter", isComposing: true, inputFocused: true }), false);
   assert.equal(shouldChoosePaletteItem({ key: "Enter", isComposing: false, inputFocused: true }), true);
   assert.equal(shouldChoosePaletteItem({ key: "Enter", isComposing: false, inputFocused: false }), false);
+});
+
+test("IME 组合输入期间方向键不移动命令面板选项", () => {
+  assert.equal(shouldMovePaletteSelection({ key: "ArrowDown", isComposing: true }), false);
+  assert.equal(shouldMovePaletteSelection({ key: "ArrowUp", isComposing: true }), false);
+  assert.equal(shouldMovePaletteSelection({ key: "ArrowDown", isComposing: false }), true);
+  assert.equal(shouldMovePaletteSelection({ key: "ArrowUp", isComposing: false }), true);
+  assert.equal(shouldMovePaletteSelection({ key: "Enter", isComposing: false }), false);
 });
 
 test("文章正文只从选择后的详情响应读取", () => {
