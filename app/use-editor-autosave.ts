@@ -189,6 +189,8 @@ export function useEditorAutosave(input: {
 
   function suspendForIdentityLoss() {
     if (!currentLifecycleKey) return;
+    const active = activeDraftRef.current;
+    if (active?.key === currentLifecycleKey) flushActiveDraft(active);
     suspendedScopeKeyRef.current = currentLifecycleKey;
     activeDraftRef.current = null;
     setRecovery(null);
@@ -197,5 +199,16 @@ export function useEditorAutosave(input: {
     setStatus("idle");
   }
 
-  return { recovery: visibleRecovery, status: visibleStatus, savedAt, ready, acceptRecovery, discardRecovery, clearAfterServerSave, persistNow, suspendForIdentityLoss };
+  function deactivate() {
+    const active = activeDraftRef.current;
+    if (active) flushActiveDraft(active);
+    activeDraftRef.current = null;
+    suspendedScopeKeyRef.current = null;
+    setRecovery(null);
+    setLoadedScopeKey(null);
+    setSavedAt(null);
+    setStatus("idle");
+  }
+
+  return { recovery: visibleRecovery, status: visibleStatus, savedAt, ready, acceptRecovery, discardRecovery, clearAfterServerSave, persistNow, suspendForIdentityLoss, deactivate };
 }

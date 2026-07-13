@@ -73,6 +73,13 @@ test("两个账户共用浏览器时不能读取彼此草稿", () => {
   assert.equal(storage.values.size, 2);
 });
 
+test("失效后只有原账户能恢复对应作用域内容", () => {
+  const storage = new MemoryStorage();
+  writeEditorDraft(storage, scope, fields);
+  assert.deepEqual(readEditorDraft(storage, scope)?.fields, fields);
+  assert.equal(readEditorDraft(storage, editorDraftScope(userTwo, "new")!), null);
+});
+
 test("损坏、错误版本、其他账户和其他文章的草稿被安全拒绝", () => {
   const stored = createStoredEditorDraft(scope, fields);
   assert.equal(parseStoredEditorDraft("not-json", userOne, "new"), null);
@@ -108,6 +115,22 @@ test("900ms 防抖触发前离开编辑器会同步刷新 dirty 草稿", () => {
   const result = flushPendingEditorDraft(storage, { scope, fields, dirty: true, recoveryPending: false }, leftAt);
   assert.equal(result?.written, true);
   assert.equal(readEditorDraft(storage, scope)?.savedAt, leftAt.toISOString());
+  assert.deepEqual(readEditorDraft(storage, scope)?.fields, fields);
+});
+
+test("Session 失效发生在防抖前时仍可同步保存最新编辑", () => {
+  const storage = new MemoryStorage();
+  const latest = { ...fields, content: `${fields.content}\n尚未等到防抖的输入` };
+  const result = flushPendingEditorDraft(storage, { scope, fields: latest, dirty: true, recoveryPending: false });
+  assert.equal(result?.written, true);
+  assert.deepEqual(readEditorDraft(storage, scope)?.fields, latest);
+});
+
+test("Session 失效不会覆盖尚未处理的恢复草稿", () => {
+  const storage = new MemoryStorage();
+  writeEditorDraft(storage, scope, fields);
+  const result = flushPendingEditorDraft(storage, { scope, fields: { ...fields, content: "空白初始表单" }, dirty: true, recoveryPending: true });
+  assert.equal(result, null);
   assert.deepEqual(readEditorDraft(storage, scope)?.fields, fields);
 });
 
@@ -236,6 +259,26 @@ test("媒体上传入口在单飞期间由 UI 原生 disabled", () => {
   assert.equal([...source.matchAll(/<input[^>]*disabled=\{mediaUploadBusy \|\| busy\}/g)].length, 3);
   assert.match(source, /editorMutationLock\.tryAcquire\(\)/);
   assert.match(source, /invalidateIdentityOn401: false/);
-  assert.match(source, /localDraft\.suspendForIdentityLoss\(\)/);
+  assert.match(source, /function applyAuthenticatedEditorIdentity\(userId: string\)/);
+  assert.match(source, /function handleEditorSessionExpired\(\)/);
+  assert.match(source, /handleEditorSessionExpired\(\)/);
+  assert.match(source, /sessionExpiryNotifiedRef\.current/);
+  assert.match(source, /message === "登录状态已失效，请重新登录" && sessionExpiryNotifiedRef\.current/);
   assert.match(source, /new AbortController\(\)/);
+});
+
+test("身份失效先刷新草稿再丢弃活动作用域", () => {
+  const source = readFileSync(new URL("../app/use-editor-autosave.ts", import.meta.url), "utf8");
+  const suspend = source.slice(source.indexOf("function suspendForIdentityLoss"), source.indexOf("return { recovery:"));
+  assert.ok(suspend.indexOf("flushActiveDraft(active)") < suspend.indexOf("activeDraftRef.current = null"));
+});
+
+test("关闭编辑器会重置恢复就绪状态并在重开时重新检查", () => {
+  const source = readFileSync(new URL("../app/use-editor-autosave.ts", import.meta.url), "utf8");
+  const deactivate = source.slice(source.indexOf("function deactivate"), source.indexOf("return { recovery:"));
+  assert.match(deactivate, /flushActiveDraft\(active\)/);
+  assert.match(deactivate, /setLoadedScopeKey\(null\)/);
+  assert.match(source, /const ready = Boolean\(currentLifecycleKey && loadedScopeKey === currentLifecycleKey\)/);
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /view === "editor" && next !== "editor"\) \{ localDraft\.deactivate\(\)/);
 });

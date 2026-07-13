@@ -79,6 +79,7 @@ export default function Home() {
   const editorOperationRef = useRef(0);
   const editorIdentityRevisionRef = useRef(0);
   const sessionBootstrapAbortRef = useRef<AbortController | null>(null);
+  const sessionExpiryNotifiedRef = useRef(false);
   const [editorDraftId, setEditorDraftId] = useState("new");
   const [editorDirty, setEditorDirty] = useState(false);
   const [saveState, setSaveState] = useState("尚未保存");
@@ -145,11 +146,12 @@ export default function Home() {
   }, []);
 
   function navigate(next: View) {
-    if (view === "editor" && next !== "editor") { editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, generation: editorAsyncTargetRef.current.generation + 1 }; setBusy(false); }
+    if (view === "editor" && next !== "editor") { localDraft.deactivate(); editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, generation: editorAsyncTargetRef.current.generation + 1 }; setBusy(false); }
     setView(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function notify(message: string) {
+    if (message === "登录状态已失效，请重新登录" && sessionExpiryNotifiedRef.current) return;
     setToast(message); window.setTimeout(() => setToast(""), 2200);
   }
 
@@ -190,8 +192,7 @@ export default function Home() {
     notify("已放弃本地恢复内容");
   }
 
-  function applyEditorIdentity(userId: string | null, suspendCurrentDraft = false) {
-    if (suspendCurrentDraft) localDraft.suspendForIdentityLoss();
+  function advanceEditorIdentity(userId: string | null) {
     const next = advanceEditorIdentityState({ revision: editorIdentityRevisionRef.current, operationId: editorOperationRef.current, target: editorAsyncTargetRef.current }, userId);
     editorIdentityRevisionRef.current = next.revision;
     setEditorIdentityRevision(next.revision);
@@ -199,14 +200,29 @@ export default function Home() {
     sessionBootstrapAbortRef.current = null;
     editorOperationRef.current = next.operationId;
     editorAsyncTargetRef.current = next.target;
+    setEditorUserId(userId);
+    setEditorIdentityResolved(true);
+  }
+
+  function applyAuthenticatedEditorIdentity(userId: string) {
+    advanceEditorIdentity(userId);
+    sessionExpiryNotifiedRef.current = false;
     editorFormRef.current = initialEditorForm;
     setEditorForm(initialEditorForm);
     setEditorDirty(false);
-    setSaveState(userId ? "尚未保存" : "登录状态已失效");
-    setEditorUserId(userId);
-    setEditorIdentityResolved(true);
-    if (!userId) setOperatorRole("ADMIN");
-    if (suspendCurrentDraft) setBusy(false);
+    setSaveState("尚未保存");
+  }
+
+  function handleEditorSessionExpired() {
+    localDraft.suspendForIdentityLoss();
+    advanceEditorIdentity(null);
+    setSaveState("登录状态已失效");
+    setOperatorRole("ADMIN");
+    setBusy(false);
+    if (!sessionExpiryNotifiedRef.current) {
+      notify("登录状态已失效，请重新登录");
+      sessionExpiryNotifiedRef.current = true;
+    }
   }
 
   function csrfToken() { return document.cookie.split(";").map((part) => part.trim().split("=")).find(([key]) => key === "shadow_sky_csrf")?.slice(1).join("=") ?? ""; }
@@ -216,17 +232,16 @@ export default function Home() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401 && editorUnauthorizedInvalidatesIdentity(editorIdentityRevisionRef.current, requestIdentityRevision, options.invalidateIdentityOn401 !== false)) {
-        applyEditorIdentity(null, true);
-        notify("登录状态已失效，请重新登录");
+        handleEditorSessionExpired();
         throw new Error("登录状态已失效，请重新登录");
       }
       throw new Error(data?.error?.message ?? "请求失败，请稍后重试");
     }
     return data;
   }
-  async function submitLogin(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify(loginForm) }, { invalidateIdentityOn401: false }); const userId = typeof data.user.id === "string" ? data.user.id : null; applyEditorIdentity(userId); if (data.user.role === "OWNER" || data.user.role === "ADMIN") setOperatorRole(data.user.role); if (data.user.mustChangePassword) { notify("请先修改管理员设置的临时密码"); navigate("changePassword"); } else { notify("登录成功"); navigate("studio"); } } catch (error) { notify(error instanceof Error ? error.message : "登录失败"); } finally { setBusy(false); } }
+  async function submitLogin(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify(loginForm) }, { invalidateIdentityOn401: false }); const userId = typeof data.user.id === "string" ? data.user.id : null; if (!userId) throw new Error("登录响应无效"); applyAuthenticatedEditorIdentity(userId); if (data.user.role === "OWNER" || data.user.role === "ADMIN") setOperatorRole(data.user.role); if (data.user.mustChangePassword) { notify("请先修改管理员设置的临时密码"); navigate("changePassword"); } else { notify("登录成功"); navigate("studio"); } } catch (error) { notify(error instanceof Error ? error.message : "登录失败"); } finally { setBusy(false); } }
   async function submitInvite(event: FormEvent) { event.preventDefault(); setBusy(true); try { await api("/api/auth/invite", { method: "POST", body: JSON.stringify(inviteForm) }); notify("注册成功，请使用新账户登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "邀请无效"); } finally { setBusy(false); } }
-  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); applyEditorIdentity(null, true); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
+  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); localDraft.suspendForIdentityLoss(); advanceEditorIdentity(null); editorFormRef.current = initialEditorForm; setEditorForm(initialEditorForm); setEditorDirty(false); setSaveState("尚未保存"); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
   async function createAdminInvitation(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/admin/invitations", { method: "POST", body: JSON.stringify(adminInviteForm) }); setGeneratedInviteLink(data.inviteLink); notify("一次性邀请已生成"); } catch (error) { notify(error instanceof Error ? error.message : "创建邀请失败"); } finally { setBusy(false); } }
   async function resetUserPassword(userId: string) { setBusy(true); try { const data = await api("/api/admin/users/reset-password", { method: "POST", body: JSON.stringify({ userId }) }); setTemporaryPassword(data.temporaryPassword); notify("临时密码已生成，旧 Session 已撤销"); } catch (error) { notify(error instanceof Error ? error.message : "重置失败"); } finally { setBusy(false); } }
   async function uploadImage(file: File, purpose: "AVATAR" | "COVER" | "CONTENT") {
