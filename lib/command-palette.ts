@@ -22,6 +22,41 @@ export type SearchPost = {
   contentHtml?: string;
 };
 
+export type ArticleSelection = {
+  id: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  contentHtml?: string;
+  source: "catalog" | "search";
+};
+
+export function selectCatalogArticle(article: {
+  title: string;
+  excerpt: string;
+  category: string;
+  tags: string[];
+}): ArticleSelection {
+  return {
+    id: `catalog-${stableHash(article.title)}`,
+    title: article.title,
+    summary: article.excerpt,
+    tags: [article.category, ...article.tags],
+    source: "catalog",
+  };
+}
+
+export function selectSearchArticle(post: SearchPost): ArticleSelection {
+  return {
+    id: post.id,
+    title: post.title,
+    summary: post.summary,
+    tags: [...post.tags],
+    ...(post.contentHtml ? { contentHtml: post.contentHtml } : {}),
+    source: "search",
+  };
+}
+
 export function readSearchPosts(payload: unknown): SearchPost[] {
   if (!payload || typeof payload !== "object" || !("posts" in payload) || !Array.isArray(payload.posts)) return [];
   return payload.posts.flatMap((candidate) => {
@@ -52,6 +87,47 @@ export function normalizePaletteQuery(value: string) {
   return value.trim().toLocaleLowerCase();
 }
 
+type PaletteSearchRequest = Readonly<{ query: string; revision: number }>;
+
+export function createPaletteSearchCoordinator() {
+  let currentQuery = "";
+  let revision = 0;
+
+  return {
+    begin(query: string): PaletteSearchRequest {
+      currentQuery = normalizePaletteQuery(query);
+      revision += 1;
+      return { query: currentQuery, revision };
+    },
+    invalidate() {
+      currentQuery = "";
+      revision += 1;
+    },
+    isCurrent(request: PaletteSearchRequest) {
+      return request.revision === revision && request.query === currentQuery;
+    },
+  };
+}
+
+function stableHash(value: string) {
+  let hash = 2166136261;
+  for (const character of value) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+export function createPaletteOptionId(kind: "category" | "tag" | "post", value: string, index: number) {
+  const slug = value
+    .normalize("NFKD")
+    .toLocaleLowerCase()
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "item";
+  return `palette-${kind}-${slug}-${stableHash(value)}-${index}`;
+}
+
 function matches(item: Pick<PaletteItem, "label" | "description">, query: string) {
   return `${item.label} ${item.description}`.toLocaleLowerCase().includes(query);
 }
@@ -61,24 +137,27 @@ export function buildPaletteItems(input: {
   categories: string[];
   tags: string[];
   posts: SearchPost[];
+  resultQuery?: string;
 }) {
   const query = normalizePaletteQuery(input.query);
-  const categories: PaletteItem[] = input.categories.map((category) => ({
-    id: `category-${category}`,
+  const categories: PaletteItem[] = input.categories.map((category, index) => ({
+    id: createPaletteOptionId("category", category, index),
     label: category,
     description: "按分类浏览文章",
     group: "分类",
     destination: { kind: "category", value: category },
   }));
-  const tags: PaletteItem[] = input.tags.map((tag) => ({
-    id: `tag-${tag}`,
+  const tags: PaletteItem[] = input.tags.map((tag, index) => ({
+    id: createPaletteOptionId("tag", tag, index),
     label: tag,
     description: "查看包含此标签的文章",
     group: "标签",
     destination: { kind: "tag", value: tag },
   }));
-  const posts: PaletteItem[] = input.posts.map((post) => ({
-    id: `post-${post.id}`,
+  const posts: PaletteItem[] = (
+    input.resultQuery === undefined || normalizePaletteQuery(input.resultQuery) === query ? input.posts : []
+  ).map((post, index) => ({
+    id: createPaletteOptionId("post", post.id, index),
     label: post.title,
     description: post.summary || post.tags.join(" · ") || "打开文章",
     group: "文章",

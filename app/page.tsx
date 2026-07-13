@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CommandPalette } from "./command-palette";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
-import type { PaletteDestination, SearchPost } from "@/lib/command-palette";
+import {
+  selectCatalogArticle,
+  selectSearchArticle,
+  type ArticleSelection,
+  type PaletteDestination,
+} from "@/lib/command-palette";
 
 type View = "home" | "articles" | "article" | "profile" | "bookmarks" | "studio" | "editor" | "admin" | "users" | "adminInvite" | "audit" | "login" | "invite" | "changePassword" | "forbidden";
 
@@ -54,7 +59,7 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [selectedSearchPost, setSelectedSearchPost] = useState<SearchPost | null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<ArticleSelection>(() => selectCatalogArticle(articles[0]));
   const [busy, setBusy] = useState(false);
   const [loginForm, setLoginForm] = useState({ login: "", password: "" });
   const [inviteForm, setInviteForm] = useState({ token: "", handle: "", displayName: "", password: "", confirmPassword: "" });
@@ -107,6 +112,11 @@ export default function Home() {
     setToast(message); window.setTimeout(() => setToast(""), 2200);
   }
 
+  function openCatalogArticle(article: (typeof articles)[number]) {
+    setSelectedArticle(selectCatalogArticle(article));
+    navigate("article");
+  }
+
   function selectCommand(destination: PaletteDestination) {
     if (destination.kind === "page") {
       navigate(destination.view);
@@ -124,7 +134,7 @@ export default function Home() {
       navigate("articles");
       return;
     }
-    setSelectedSearchPost(destination.post);
+    setSelectedArticle(selectSearchArticle(destination.post));
     navigate("article");
   }
 
@@ -202,14 +212,14 @@ export default function Home() {
           <section className="section featured-section">
             <div className="section-head"><div><span className="kicker">FEATURED</span><h2>本周推荐</h2></div><button className="text-link" onClick={() => navigate("articles")}>查看全部文章 →</button></div>
             <div className="featured-grid">
-              <button className="featured-art" onClick={() => navigate("article")}><div className="code-window"><span /><span /><span /><pre>agent.run({`{\n  `}<b>trustBoundary</b>: true,{`\n  evaluate: continuous\n}`})</pre></div><div className="orb orb-one" /><div className="orb orb-two" /></button>
-              <div className="featured-copy"><span className="pill">AI Engineering</span><h2>把一个 AI Agent<br />从 Demo 带到生产环境</h2><p>从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。</p><div className="feature-author"><Avatar initials="LC" /><div><b>Lin Chen</b><span>7 月 9 日 · 8 分钟阅读</span></div></div><button className="round-arrow" onClick={() => navigate("article")} aria-label="阅读文章">↗</button></div>
+              <button className="featured-art" onClick={() => openCatalogArticle(articles[0])}><div className="code-window"><span /><span /><span /><pre>agent.run({`{\n  `}<b>trustBoundary</b>: true,{`\n  evaluate: continuous\n}`})</pre></div><div className="orb orb-one" /><div className="orb orb-two" /></button>
+              <div className="featured-copy"><span className="pill">AI Engineering</span><h2>把一个 AI Agent<br />从 Demo 带到生产环境</h2><p>从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。</p><div className="feature-author"><Avatar initials="LC" /><div><b>Lin Chen</b><span>7 月 9 日 · 8 分钟阅读</span></div></div><button className="round-arrow" onClick={() => openCatalogArticle(articles[0])} aria-label="阅读文章">↗</button></div>
             </div>
           </section>
 
           <section className="section">
             <div className="section-head"><div><span className="kicker">LATEST</span><h2>最新发布</h2></div><div className="segmented"><button className="selected">全部</button><button>技术</button><button>学习</button><button>项目</button></div></div>
-            <div className="cards-grid">{articles.slice(1).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div>
+            <div className="cards-grid">{articles.slice(1).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div>
           </section>
 
           <section className="section category-section">
@@ -227,22 +237,22 @@ export default function Home() {
           <div className="page-heading"><span className="kicker">LIBRARY</span><h1>文章</h1><p>来自社区成员的技术实践、学习记录与项目复盘。</p></div>
           <div className="library-toolbar"><label className="search-box">⌕<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索文章、标签或作者…" /></label><select value={filter} onChange={(e) => setFilter(e.target.value)}><option>全部</option>{categories.map(([c]) => <option key={c}>{c}</option>)}</select></div>
           <div className="filter-chips">{["全部", "AI Engineering", "Frontend", "Backend", "Community"].map((item) => <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}</button>)}</div>
-          <div className="cards-grid library-grid">{filtered.map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div>
+          <div className="cards-grid library-grid">{filtered.map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div>
           {!filtered.length && <div className="empty-state"><span>⌕</span><h3>没有找到相关内容</h3><p>试试更短的关键词或其他分类。</p></div>}
         </section>}
 
         {view === "article" && <article className="reading-page page-enter">
           <button className="back-link" onClick={() => navigate("articles")}>← 返回文章</button>
-          <div className="article-hero"><span className="pill">{selectedSearchPost?.tags[0] ?? "AI Engineering"}</span><h1>{selectedSearchPost ? selectedSearchPost.title : <>把一个 AI Agent<br />从 Demo 带到生产环境</>}</h1><p>{selectedSearchPost?.summary ?? "从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。"}</p><div className="article-byline"><Avatar initials="LC" /><div><b>Lin Chen</b><span>2026 年 7 月 9 日 · 8 分钟阅读</span></div><button onClick={() => { setLiked(!liked); notify(liked ? "已取消点赞" : "已点赞"); }}>{liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => { setBookmarked(!bookmarked); notify(bookmarked ? "已取消收藏" : "已加入我的收藏"); }}>{bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
+          <div className="article-hero"><span className="pill">{selectedArticle.tags[0] ?? "文章"}</span><h1>{selectedArticle.title}</h1><p>{selectedArticle.summary}</p><div className="article-byline"><Avatar initials="LC" /><div><b>Lin Chen</b><span>2026 年 7 月 9 日 · 8 分钟阅读</span></div><button onClick={() => { setLiked(!liked); notify(liked ? "已取消点赞" : "已点赞"); }}>{liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => { setBookmarked(!bookmarked); notify(bookmarked ? "已取消收藏" : "已加入我的收藏"); }}>{bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
           <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>production_ready = evaluation + observability + boundaries</pre></div></div>
-          <div className="reading-layout"><aside><b>本文目录</b>{selectedSearchPost ? <span>正文标题将作为章节导航</span> : <><a href="#context">01 背景</a><a href="#evaluation">02 持续评估</a><a href="#boundary">03 权限边界</a><a href="#summary">04 总结</a></>}</aside>{selectedSearchPost?.contentHtml ? <div className="prose" dangerouslySetInnerHTML={{ __html: selectedSearchPost.contentHtml }} /> : <div className="prose"><p className="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div className="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p></div>}</div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
+          <div className="reading-layout"><aside><b>本文目录</b>{selectedArticle.source === "search" ? <span>正文标题将作为章节导航</span> : <><a href="#context">01 背景</a><a href="#evaluation">02 持续评估</a><a href="#boundary">03 权限边界</a><a href="#summary">04 总结</a></>}</aside>{selectedArticle.contentHtml ? <div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /> : <div className="prose"><p className="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div className="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p></div>}</div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
         </article>}
 
         {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && <><label className="btn-secondary upload-button">上传封面<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button">插入正文图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
 
-        {view === "profile" && <section className="page section page-enter"><div className="profile-hero"><Avatar initials="SP" /><div><h1>Sky Pan</h1><p>@sky_pan · 关注云原生、Next.js 与高质量技术社区。正在把群聊里的灵感变成长期知识。</p><p><a href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://shadowskypan.asia" target="_blank" rel="noreferrer">个人网站</a></p><div className="profile-stats"><span><b>18</b>公开文章</span><span><b>1.2k</b>获赞</span></div></div>{mediaUploadEnabled && <label className="btn-secondary upload-button">更新头像<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "AVATAR")} /></label>}</div><div className="profile-tabs"><button className="selected">文章</button><button onClick={() => navigate("bookmarks")}>我的收藏</button><button>关于</button></div><div className="cards-grid">{articles.slice(0, 3).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div></section>}
+        {view === "profile" && <section className="page section page-enter"><div className="profile-hero"><Avatar initials="SP" /><div><h1>Sky Pan</h1><p>@sky_pan · 关注云原生、Next.js 与高质量技术社区。正在把群聊里的灵感变成长期知识。</p><p><a href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://shadowskypan.asia" target="_blank" rel="noreferrer">个人网站</a></p><div className="profile-stats"><span><b>18</b>公开文章</span><span><b>1.2k</b>获赞</span></div></div>{mediaUploadEnabled && <label className="btn-secondary upload-button">更新头像<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "AVATAR")} /></label>}</div><div className="profile-tabs"><button className="selected">文章</button><button onClick={() => navigate("bookmarks")}>我的收藏</button><button>关于</button></div><div className="cards-grid">{articles.slice(0, 3).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div></section>}
 
-        {view === "bookmarks" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">PRIVATE LIBRARY</span><h1>我的收藏</h1><p>收藏列表会重新执行文章可见性检查，不能用于读取已失去权限的内容。</p></div><button className="btn-secondary" onClick={() => navigate("profile")}>返回个人主页</button></div><div className="cards-grid">{articles.slice(0, 2).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div></section>}
+        {view === "bookmarks" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">PRIVATE LIBRARY</span><h1>我的收藏</h1><p>收藏列表会重新执行文章可见性检查，不能用于读取已失去权限的内容。</p></div><button className="btn-secondary" onClick={() => navigate("profile")}>返回个人主页</button></div><div className="cards-grid">{articles.slice(0, 2).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div></section>}
 
         {view === "studio" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">CREATOR STUDIO</span><h1>我的文章</h1><p>管理草稿、提交审核并追踪发布状态。发布路径由账户的 publishingPolicy 决定。</p></div><button className="btn-primary" onClick={() => navigate("editor")}>＋ 新建文章</button></div><div className="policy-banner"><span>当前发布策略</span><b>REVIEW_REQUIRED</b><p>新文章需要 Editor、Admin 或 Owner 审核。策略由管理员按用户单独设置。</p></div><div className="stat-grid"><div><span>草稿</span><b>3</b><small>其中 1 篇本周更新</small></div><div><span>待审核</span><b>2</b><small>平均 1.4 天完成</small></div><div><span>已发布</span><b>18</b><small>累计 8,492 次阅读</small></div><div><span>被退回</span><b>1</b><small>等待修改后重新提交</small></div></div><div className="table-card"><div className="table-row table-head"><span>文章</span><span>状态</span><span>可见性</span><span>更新时间</span><span /></div>{[["Azure 上的容器化 Next.js 实践","草稿","PRIVATE","今天"],["用 Next.js 构建可迁移的内容平台","已发布","PUBLIC","7 月 5 日"],["群聊知识库的内容治理","待审核","MEMBERS_ONLY","7 月 3 日"],["一次失败的缓存优化复盘","被退回","MEMBERS_ONLY","6 月 28 日"]].map((row) => <div className="table-row" key={row[0]}><span><b>{row[0]}</b><small>技术文章</small></span><span><i className={`status status-${row[1]}`}>{row[1]}</i></span><span>{row[2]}</span><span>{row[3]}</span><button onClick={() => navigate("editor")}>编辑</button></div>)}</div></section>}
 

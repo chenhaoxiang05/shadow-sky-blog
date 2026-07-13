@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
 import {
   buildPaletteItems,
+  createPaletteSearchCoordinator,
   isPaletteShortcut,
   movePaletteIndex,
   normalizePaletteQuery,
@@ -21,17 +22,24 @@ type Props = {
 
 export function CommandPalette({ open, onOpenChange, onSelect, categories, tags }: Props) {
   const [query, setQuery] = useState("");
-  const [posts, setPosts] = useState<SearchPost[]>([]);
+  const [results, setResults] = useState<{ query: string; posts: SearchPost[] }>({ query: "", posts: [] });
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [activeIndex, setActiveIndex] = useState(0);
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const searchCoordinatorRef = useRef(createPaletteSearchCoordinator());
 
   const normalizedQuery = normalizePaletteQuery(query);
   const items = useMemo(
-    () => buildPaletteItems({ query, categories, tags, posts: normalizedQuery.length >= 2 ? posts : [] }),
-    [categories, normalizedQuery.length, posts, query, tags],
+    () => buildPaletteItems({
+      query,
+      categories,
+      tags,
+      posts: normalizedQuery.length >= 2 ? results.posts : [],
+      resultQuery: results.query,
+    }),
+    [categories, normalizedQuery.length, query, results, tags],
   );
   const safeActiveIndex = activeIndex >= 0 && activeIndex < items.length ? activeIndex : items.length ? 0 : -1;
 
@@ -59,24 +67,32 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      searchCoordinatorRef.current.invalidate();
+      return;
+    }
     const normalized = normalizePaletteQuery(query);
-    if (normalized.length < 2) return;
+    if (normalized.length < 2) {
+      searchCoordinatorRef.current.invalidate();
+      return;
+    }
+    const request = searchCoordinatorRef.current.begin(normalized);
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
-      setStatus("loading");
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(normalized)}&pageSize=8`, {
           credentials: "include",
           signal: controller.signal,
         });
         if (!response.ok) throw new Error("SEARCH_UNAVAILABLE");
-        setPosts(readSearchPosts(await response.json()));
+        const posts = readSearchPosts(await response.json());
+        if (controller.signal.aborted || !searchCoordinatorRef.current.isCurrent(request)) return;
+        setResults({ query: request.query, posts });
         setActiveIndex(0);
         setStatus("idle");
       } catch {
-        if (controller.signal.aborted) return;
-        setPosts([]);
+        if (controller.signal.aborted || !searchCoordinatorRef.current.isCurrent(request)) return;
+        setResults({ query: request.query, posts: [] });
         setStatus("error");
       }
     }, 240);
@@ -89,10 +105,24 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
   if (!open) return null;
 
   function close() {
+    searchCoordinatorRef.current.invalidate();
     onOpenChange(false);
     setQuery("");
-    setPosts([]);
+    setResults({ query: "", posts: [] });
     setStatus("idle");
+  }
+
+  function updateQuery(value: string) {
+    const normalized = normalizePaletteQuery(value);
+    searchCoordinatorRef.current.invalidate();
+    setQuery(value);
+    setActiveIndex(0);
+    if (normalized.length < 2) {
+      setResults({ query: "", posts: [] });
+      setStatus("idle");
+      return;
+    }
+    setStatus("loading");
   }
 
   function choose(index: number) {
@@ -154,7 +184,7 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); }}
+            onChange={(event) => updateQuery(event.target.value)}
             placeholder="搜索文章、分类、标签或页面…"
             role="combobox"
             aria-autocomplete="list"

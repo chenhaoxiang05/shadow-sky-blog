@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildPaletteItems,
+  createPaletteSearchCoordinator,
   isPaletteShortcut,
   movePaletteIndex,
   normalizePaletteQuery,
   readSearchPosts,
+  selectCatalogArticle,
+  selectSearchArticle,
 } from "../lib/command-palette";
 
 const catalog = {
@@ -70,4 +73,72 @@ test("修饰键冲突和普通按键不会误触命令面板", () => {
   assert.equal(isPaletteShortcut({ key: "k", ctrlKey: true, metaKey: false, altKey: false, shiftKey: true }), false);
   assert.equal(isPaletteShortcut({ key: "k", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false }), false);
   assert.equal(isPaletteShortcut({ key: "p", ctrlKey: true, metaKey: false, altKey: false, shiftKey: false }), false);
+});
+
+test("命令面板文章之后打开普通卡片会替换为普通文章", () => {
+  let selected = selectSearchArticle({
+    id: "search-result",
+    title: "命令面板文章",
+    summary: "来自搜索",
+    tags: ["Search"],
+  });
+  selected = selectCatalogArticle({
+    title: "普通文章卡片",
+    excerpt: "来自首页",
+    category: "Frontend",
+    tags: ["Next.js"],
+  });
+
+  assert.equal(selected.source, "catalog");
+  assert.equal(selected.title, "普通文章卡片");
+  assert.equal(selected.summary, "来自首页");
+});
+
+test("快速修改查询时旧请求不能恢复结果且 Enter 只会选择当前查询文章", () => {
+  const coordinator = createPaletteSearchCoordinator();
+  const oldRequest = coordinator.begin("agent");
+  const currentRequest = coordinator.begin("postgres");
+  assert.equal(coordinator.isCurrent(oldRequest), false);
+  assert.equal(coordinator.isCurrent(currentRequest), true);
+
+  const staleItems = buildPaletteItems({
+    ...catalog,
+    query: "postgres",
+    resultQuery: "agent",
+    posts: [{ id: "old", title: "Agent 旧结果", summary: "旧查询", tags: [] }],
+  });
+  assert.equal(staleItems.some((item) => item.destination.kind === "post"), false);
+
+  const currentItems = buildPaletteItems({
+    categories: [],
+    tags: [],
+    query: "postgres",
+    resultQuery: "postgres",
+    posts: [{ id: "current", title: "Postgres 当前结果", summary: "新查询", tags: [] }],
+  });
+  const enterSelection = currentItems[0];
+  assert.equal(enterSelection?.destination.kind, "post");
+  if (enterSelection?.destination.kind === "post") assert.equal(enterSelection.destination.post.id, "current");
+});
+
+test("分类、中文和重复标签生成合法稳定且唯一的 option ID", () => {
+  const aiItems = buildPaletteItems({ categories: ["AI Engineering"], tags: [], posts: [], query: "ai" });
+  const tagItems = buildPaletteItems({
+    categories: [],
+    tags: ["中文标签", "重复标签", "重复标签"],
+    posts: [],
+    query: "标签",
+  });
+  const items = [...aiItems, ...tagItems];
+  const ids = items.map((item) => item.id);
+
+  assert.ok(ids.every((id) => !/\s/.test(id)));
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(
+    buildPaletteItems({ categories: ["AI Engineering"], tags: [], posts: [], query: "ai" }).map((item) => item.id),
+    aiItems.map((item) => item.id),
+  );
+  const activeId = tagItems[2]?.id;
+  assert.ok(activeId);
+  assert.ok(tagItems.some((item) => item.id === activeId));
 });
