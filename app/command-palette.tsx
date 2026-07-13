@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
 import {
   buildPaletteItems,
   createPaletteSearchCoordinator,
-  isPaletteShortcut,
   movePaletteIndex,
   normalizePaletteQuery,
+  paletteShortcutAction,
   readSearchPosts,
+  shouldChoosePaletteItem,
   type PaletteDestination,
   type SearchPost,
 } from "@/lib/command-palette";
@@ -15,7 +16,7 @@ import {
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (destination: PaletteDestination) => void;
+  onSelect: (destination: PaletteDestination) => void | Promise<void>;
   categories: string[];
   tags: string[];
 };
@@ -29,6 +30,14 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
   const inputRef = useRef<HTMLInputElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const searchCoordinatorRef = useRef(createPaletteSearchCoordinator());
+
+  const close = useCallback(() => {
+    searchCoordinatorRef.current.invalidate();
+    onOpenChange(false);
+    setQuery("");
+    setResults({ query: "", posts: [] });
+    setStatus("idle");
+  }, [onOpenChange]);
 
   const normalizedQuery = normalizePaletteQuery(query);
   const items = useMemo(
@@ -45,13 +54,15 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
-      if (!isPaletteShortcut(event)) return;
+      const action = paletteShortcutAction(open, event);
+      if (action === "ignore") return;
       event.preventDefault();
-      onOpenChange(!open);
+      if (action === "close") close();
+      else onOpenChange(true);
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [onOpenChange, open]);
+  }, [close, onOpenChange, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -104,14 +115,6 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
 
   if (!open) return null;
 
-  function close() {
-    searchCoordinatorRef.current.invalidate();
-    onOpenChange(false);
-    setQuery("");
-    setResults({ query: "", posts: [] });
-    setStatus("idle");
-  }
-
   function updateQuery(value: string) {
     const normalized = normalizePaletteQuery(value);
     searchCoordinatorRef.current.invalidate();
@@ -128,7 +131,7 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
   function choose(index: number) {
     const item = items[index];
     if (!item) return;
-    onSelect(item.destination);
+    void onSelect(item.destination);
     close();
   }
 
@@ -147,7 +150,11 @@ export function CommandPalette({ open, onOpenChange, onSelect, categories, tags 
       setActiveIndex((current) => movePaletteIndex(current, event.key === "ArrowDown" ? 1 : -1, items.length));
       return;
     }
-    if (event.key === "Enter" && document.activeElement === inputRef.current) {
+    if (shouldChoosePaletteItem({
+      key: event.key,
+      isComposing: event.nativeEvent.isComposing,
+      inputFocused: document.activeElement === inputRef.current,
+    })) {
       event.preventDefault();
       choose(safeActiveIndex);
       return;

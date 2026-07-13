@@ -19,7 +19,10 @@ export type SearchPost = {
   title: string;
   summary: string;
   tags: string[];
-  contentHtml?: string;
+  authorDisplayName: string;
+  authorHandle: string;
+  publishedAt: string | null;
+  readTimeMinutes: number;
 };
 
 export type ArticleSelection = {
@@ -27,7 +30,11 @@ export type ArticleSelection = {
   title: string;
   summary: string;
   tags: string[];
-  contentHtml?: string;
+  contentHtml: string;
+  authorDisplayName: string;
+  authorInitials: string;
+  publishedLabel: string;
+  readTimeLabel: string;
   source: "catalog" | "search";
 };
 
@@ -36,25 +43,70 @@ export function selectCatalogArticle(article: {
   excerpt: string;
   category: string;
   tags: string[];
+  contentHtml: string;
+  author: string;
+  initials: string;
+  published: string;
+  readTime: string;
 }): ArticleSelection {
   return {
     id: `catalog-${stableHash(article.title)}`,
     title: article.title,
     summary: article.excerpt,
     tags: [article.category, ...article.tags],
+    contentHtml: article.contentHtml,
+    authorDisplayName: article.author,
+    authorInitials: article.initials,
+    publishedLabel: article.published,
+    readTimeLabel: article.readTime,
     source: "catalog",
   };
 }
 
-export function selectSearchArticle(post: SearchPost): ArticleSelection {
+function initialsFor(value: string) {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length > 1) return words.slice(0, 2).map((word) => word[0]).join("").toLocaleUpperCase();
+  return Array.from(words[0] ?? "成员").slice(0, 2).join("").toLocaleUpperCase();
+}
+
+function formatPublishedAt(value: string | null) {
+  if (!value) return "尚未发布";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "发布时间未知";
+  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(date);
+}
+
+export function selectSearchArticle(post: SearchPost, contentHtml: string): ArticleSelection {
   return {
     id: post.id,
     title: post.title,
     summary: post.summary,
     tags: [...post.tags],
-    ...(post.contentHtml ? { contentHtml: post.contentHtml } : {}),
+    contentHtml,
+    authorDisplayName: post.authorDisplayName,
+    authorInitials: initialsFor(post.authorDisplayName || post.authorHandle),
+    publishedLabel: formatPublishedAt(post.publishedAt),
+    readTimeLabel: `${post.readTimeMinutes} 分钟阅读`,
     source: "search",
   };
+}
+
+export function readPostContent(payload: unknown) {
+  if (!payload || typeof payload !== "object" || !("post" in payload) || !payload.post || typeof payload.post !== "object") return null;
+  const contentHtml = (payload.post as Record<string, unknown>).contentHtml;
+  return typeof contentHtml === "string" ? contentHtml : null;
+}
+
+export type ArticleInteraction = { liked: boolean; bookmarked: boolean };
+export type ArticleInteractions = Record<string, ArticleInteraction>;
+
+export function toggleArticleInteraction(
+  interactions: ArticleInteractions,
+  articleId: string,
+  field: keyof ArticleInteraction,
+): ArticleInteractions {
+  const current = interactions[articleId] ?? { liked: false, bookmarked: false };
+  return { ...interactions, [articleId]: { ...current, [field]: !current[field] } };
 }
 
 export function readSearchPosts(payload: unknown): SearchPost[] {
@@ -62,14 +114,22 @@ export function readSearchPosts(payload: unknown): SearchPost[] {
   return payload.posts.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object") return [];
     const record = candidate as Record<string, unknown>;
-    if (typeof record.id !== "string" || typeof record.title !== "string" || typeof record.summary !== "string") return [];
+    if (
+      typeof record.id !== "string" || typeof record.title !== "string" || typeof record.summary !== "string" ||
+      typeof record.authorDisplayName !== "string" || typeof record.authorHandle !== "string" ||
+      !(record.publishedAt === null || typeof record.publishedAt === "string") ||
+      typeof record.readTimeMinutes !== "number" || !Number.isFinite(record.readTimeMinutes) || record.readTimeMinutes < 1
+    ) return [];
     const tags = Array.isArray(record.tags) ? record.tags.filter((tag): tag is string => typeof tag === "string") : [];
     return [{
       id: record.id,
       title: record.title,
       summary: record.summary,
       tags,
-      ...(typeof record.contentHtml === "string" ? { contentHtml: record.contentHtml } : {}),
+      authorDisplayName: record.authorDisplayName,
+      authorHandle: record.authorHandle,
+      publishedAt: record.publishedAt,
+      readTimeMinutes: Math.ceil(record.readTimeMinutes),
     }];
   });
 }
@@ -181,4 +241,13 @@ export function movePaletteIndex(current: number, delta: -1 | 1, length: number)
 
 export function isPaletteShortcut(event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">) {
   return event.key.toLocaleLowerCase() === "k" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
+}
+
+export function paletteShortcutAction(open: boolean, event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">) {
+  if (!isPaletteShortcut(event)) return "ignore" as const;
+  return open ? "close" as const : "open" as const;
+}
+
+export function shouldChoosePaletteItem(event: { key: string; isComposing: boolean; inputFocused: boolean }) {
+  return event.key === "Enter" && event.inputFocused && !event.isComposing;
 }

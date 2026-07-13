@@ -1,6 +1,6 @@
 import { and, count, countDistinct, desc, eq, gt, gte, ilike, isNotNull, isNull, lte, notInArray, or, sql, sum } from "drizzle-orm";
 import type { Actor, AuditEvent, CommentRecord, InvitationRecord, MediaAssetRecord, MediaPurpose, PostRecord, PublishingPolicy, Role, SessionRecord, UserRecord, UserStatus } from "../lib/domain";
-import type { NewPost, PostChanges, Repository, SearchInput, SessionWithUser } from "../lib/repository";
+import type { NewPost, PostChanges, Repository, SearchInput, SearchPostProjection, SessionWithUser } from "../lib/repository";
 import type { Database } from "./index";
 import { auditLogs, bookmarks, categories, comments, invitations, loginAttempts, mediaAssets, postLikes, posts, postTags, sessions, tags, users } from "./schema";
 
@@ -55,10 +55,35 @@ export class PostgresRepository implements Repository {
     const conditions = [this.searchVisibility(input.actor), input.category ? eq(categories.slug, input.category) : undefined, input.tag ? eq(tags.slug, input.tag) : undefined, input.author ? eq(users.handle, input.author) : undefined, input.from ? gte(posts.publishedAt, input.from) : undefined, input.to ? lte(posts.publishedAt, input.to) : undefined];
     if (input.q) { const searchQuery = sql`websearch_to_tsquery('simple', ${input.q})`; conditions.push(or(sql`to_tsvector('simple', coalesce(${posts.title}, '') || ' ' || coalesce(${posts.summary}, '') || ' ' || coalesce(${posts.content}, '')) @@ ${searchQuery}`, sql`to_tsvector('simple', coalesce(${users.displayName}, '') || ' ' || coalesce(${users.handle}, '')) @@ ${searchQuery}`, sql`to_tsvector('simple', coalesce(${categories.name}, '')) @@ ${searchQuery}`, sql`to_tsvector('simple', coalesce(${tags.name}, '')) @@ ${searchQuery}`)); }
     const where = and(...conditions.filter(Boolean) as never[]);
-    const base = this.db.selectDistinct({ post: posts }).from(posts).leftJoin(users, eq(users.id, posts.authorId)).leftJoin(categories, eq(categories.id, posts.categoryId)).leftJoin(postTags, eq(postTags.postId, posts.id)).leftJoin(tags, eq(tags.id, postTags.tagId)).where(where);
+    const base = this.db.selectDistinct({
+      id: posts.id,
+      authorId: posts.authorId,
+      title: posts.title,
+      summary: posts.summary,
+      status: posts.status,
+      visibility: posts.visibility,
+      publishedAt: posts.publishedAt,
+      deletedAt: posts.deletedAt,
+      authorDisplayName: users.displayName,
+      authorHandle: users.handle,
+      readTimeMinutes: sql<number>`greatest(1, ceil(char_length(${posts.content}) / 500.0))::integer`,
+    }).from(posts).leftJoin(users, eq(users.id, posts.authorId)).leftJoin(categories, eq(categories.id, posts.categoryId)).leftJoin(postTags, eq(postTags.postId, posts.id)).leftJoin(tags, eq(tags.id, postTags.tagId)).where(where);
     const rows = await base.orderBy(sql`${posts.publishedAt} desc nulls last`, desc(posts.id)).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const [totalRow] = await this.db.select({ value: countDistinct(posts.id) }).from(posts).leftJoin(users, eq(users.id, posts.authorId)).leftJoin(categories, eq(categories.id, posts.categoryId)).leftJoin(postTags, eq(postTags.postId, posts.id)).leftJoin(tags, eq(tags.id, postTags.tagId)).where(where);
-    const result = await Promise.all(rows.map(async ({ post }) => this.postShape(post, await this.tagsFor(post.id)))); const total = Number(totalRow.value); return { posts: result, total, page: input.page, pageSize: input.pageSize, nextPage: input.page * input.pageSize < total ? input.page + 1 : null };
+    const result: SearchPostProjection[] = await Promise.all(rows.map(async (row) => ({
+      id: row.id,
+      authorId: row.authorId,
+      title: row.title,
+      summary: row.summary,
+      tags: await this.tagsFor(row.id),
+      status: row.status as PostRecord["status"],
+      visibility: row.visibility as PostRecord["visibility"],
+      publishedAt: row.publishedAt,
+      deletedAt: row.deletedAt,
+      authorDisplayName: row.authorDisplayName ?? row.authorHandle ?? "社区成员",
+      authorHandle: row.authorHandle ?? "",
+      readTimeMinutes: Number(row.readTimeMinutes),
+    }))); const total = Number(totalRow.value); return { posts: result, total, page: input.page, pageSize: input.pageSize, nextPage: input.page * input.pageSize < total ? input.page + 1 : null };
   }
 
   async createComment(input: { postId: string; authorId: string; parentId?: string | null; depth: number; body: string }, now: Date) { const [row] = await this.db.insert(comments).values({ ...input, createdAt: now, updatedAt: now }).returning(); return row as CommentRecord; }

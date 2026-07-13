@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   buildPaletteItems,
@@ -6,9 +7,14 @@ import {
   isPaletteShortcut,
   movePaletteIndex,
   normalizePaletteQuery,
+  paletteShortcutAction,
+  readPostContent,
   readSearchPosts,
   selectCatalogArticle,
   selectSearchArticle,
+  shouldChoosePaletteItem,
+  toggleArticleInteraction,
+  type SearchPost,
 } from "../lib/command-palette";
 
 const catalog = {
@@ -16,6 +22,20 @@ const catalog = {
   tags: ["Next.js", "PostgreSQL"],
   posts: [],
 };
+
+function searchPost(overrides: Partial<SearchPost> = {}): SearchPost {
+  return {
+    id: "post-1",
+    title: "索引设计复盘",
+    summary: "一次真实慢查询",
+    tags: ["PostgreSQL"],
+    authorDisplayName: "Mika Chen",
+    authorHandle: "mika",
+    publishedAt: "2026-07-07T00:00:00.000Z",
+    readTimeMinutes: 11,
+    ...overrides,
+  };
+}
 
 test("空查询显示高价值页面入口与分类", () => {
   const items = buildPaletteItems({ ...catalog, query: "" });
@@ -35,21 +55,21 @@ test("文章结果保留服务端返回的标识和安全摘要", () => {
   const items = buildPaletteItems({
     ...catalog,
     query: "索引",
-    posts: [{ id: "post-1", title: "索引设计复盘", summary: "一次真实慢查询", tags: ["PostgreSQL"] }],
+    posts: [searchPost()],
   });
   const post = items.find((item) => item.group === "文章");
   assert.deepEqual(post?.destination, {
     kind: "post",
-    post: { id: "post-1", title: "索引设计复盘", summary: "一次真实慢查询", tags: ["PostgreSQL"] },
+    post: searchPost(),
   });
   assert.equal(post?.description, "一次真实慢查询");
 });
 
 test("搜索响应只接收面板需要的类型安全字段", () => {
   assert.deepEqual(readSearchPosts({ posts: [
-    { id: "post-1", title: "标题", summary: "摘要", tags: ["A", 2], contentHtml: "<p>正文</p>", passwordHash: "ignored" },
+    { ...searchPost({ title: "标题", summary: "摘要", tags: ["A"] }), tags: ["A", 2], content: "原始正文", contentHtml: "<p>正文</p>", passwordHash: "ignored" },
     { id: 2, title: "无效", summary: "无效" },
-  ] }), [{ id: "post-1", title: "标题", summary: "摘要", tags: ["A"], contentHtml: "<p>正文</p>" }]);
+  ] }), [searchPost({ title: "标题", summary: "摘要", tags: ["A"] })]);
   assert.deepEqual(readSearchPosts(null), []);
 });
 
@@ -75,23 +95,32 @@ test("修饰键冲突和普通按键不会误触命令面板", () => {
   assert.equal(isPaletteShortcut({ key: "p", ctrlKey: true, metaKey: false, altKey: false, shiftKey: false }), false);
 });
 
+test("已打开的命令面板再次按快捷键会走统一关闭动作", () => {
+  const shortcut = { key: "k", ctrlKey: true, metaKey: false, altKey: false, shiftKey: false };
+  assert.equal(paletteShortcutAction(false, shortcut), "open");
+  assert.equal(paletteShortcutAction(true, shortcut), "close");
+});
+
 test("命令面板文章之后打开普通卡片会替换为普通文章", () => {
-  let selected = selectSearchArticle({
-    id: "search-result",
-    title: "命令面板文章",
-    summary: "来自搜索",
-    tags: ["Search"],
-  });
+  let selected = selectSearchArticle(searchPost({ id: "search-result", title: "命令面板文章", summary: "来自搜索", tags: ["Search"] }), "<p>搜索正文</p>");
   selected = selectCatalogArticle({
     title: "普通文章卡片",
     excerpt: "来自首页",
     category: "Frontend",
     tags: ["Next.js"],
+    contentHtml: "<p>普通文章正文</p>",
+    author: "Sky Pan",
+    initials: "SP",
+    published: "2026 年 7 月 5 日",
+    readTime: "6 分钟阅读",
   });
 
   assert.equal(selected.source, "catalog");
   assert.equal(selected.title, "普通文章卡片");
   assert.equal(selected.summary, "来自首页");
+  assert.equal(selected.contentHtml, "<p>普通文章正文</p>");
+  assert.equal(selected.authorDisplayName, "Sky Pan");
+  assert.equal(selected.publishedLabel, "2026 年 7 月 5 日");
 });
 
 test("快速修改查询时旧请求不能恢复结果且 Enter 只会选择当前查询文章", () => {
@@ -105,7 +134,7 @@ test("快速修改查询时旧请求不能恢复结果且 Enter 只会选择当�
     ...catalog,
     query: "postgres",
     resultQuery: "agent",
-    posts: [{ id: "old", title: "Agent 旧结果", summary: "旧查询", tags: [] }],
+    posts: [searchPost({ id: "old", title: "Agent 旧结果", summary: "旧查询", tags: [] })],
   });
   assert.equal(staleItems.some((item) => item.destination.kind === "post"), false);
 
@@ -114,7 +143,7 @@ test("快速修改查询时旧请求不能恢复结果且 Enter 只会选择当�
     tags: [],
     query: "postgres",
     resultQuery: "postgres",
-    posts: [{ id: "current", title: "Postgres 当前结果", summary: "新查询", tags: [] }],
+    posts: [searchPost({ id: "current", title: "Postgres 当前结果", summary: "新查询", tags: [] })],
   });
   const enterSelection = currentItems[0];
   assert.equal(enterSelection?.destination.kind, "post");
@@ -141,4 +170,40 @@ test("分类、中文和重复标签生成合法稳定且唯一的 option ID", (
   const activeId = tagItems[2]?.id;
   assert.ok(activeId);
   assert.ok(tagItems.some((item) => item.id === activeId));
+});
+
+test("IME 组合输入期间 Enter 不选择结果", () => {
+  assert.equal(shouldChoosePaletteItem({ key: "Enter", isComposing: true, inputFocused: true }), false);
+  assert.equal(shouldChoosePaletteItem({ key: "Enter", isComposing: false, inputFocused: true }), true);
+  assert.equal(shouldChoosePaletteItem({ key: "Enter", isComposing: false, inputFocused: false }), false);
+});
+
+test("文章正文只从选择后的详情响应读取", () => {
+  assert.equal(readPostContent({ post: { contentHtml: "<p>受权限保护的正文</p>", content: "不用于渲染" } }), "<p>受权限保护的正文</p>");
+  assert.equal(readPostContent({ post: { summary: "只有摘要" } }), null);
+});
+
+test("搜索与文章详情 API 分别使用轻量投影和受权限保护的读取服务", () => {
+  const searchRoute = readFileSync(new URL("../app/api/search/route.ts", import.meta.url), "utf8");
+  const postRoute = readFileSync(new URL("../app/api/posts/[id]/route.ts", import.meta.url), "utf8");
+  assert.match(searchRoute, /toSearchResponse\(await services\(\)\.search\.search\(actor, input\)\)/);
+  assert.match(postRoute, /posts\.read\(actor, id\)/);
+});
+
+test("点赞和收藏状态按文章 ID 隔离", () => {
+  let interactions = toggleArticleInteraction({}, "post-a", "liked");
+  interactions = toggleArticleInteraction(interactions, "post-a", "bookmarked");
+  assert.deepEqual(interactions["post-a"], { liked: true, bookmarked: true });
+  assert.deepEqual(interactions["post-b"] ?? { liked: false, bookmarked: false }, { liked: false, bookmarked: false });
+  interactions = toggleArticleInteraction(interactions, "post-b", "liked");
+  assert.equal(interactions["post-a"]?.liked, true);
+  assert.equal(interactions["post-b"]?.liked, true);
+});
+
+test("搜索文章选择后显示其作者、日期和阅读时长", () => {
+  const selected = selectSearchArticle(searchPost(), "<p>正文</p>");
+  assert.equal(selected.authorDisplayName, "Mika Chen");
+  assert.equal(selected.authorInitials, "MC");
+  assert.equal(selected.publishedLabel, "2026年7月7日");
+  assert.equal(selected.readTimeLabel, "11 分钟阅读");
 });

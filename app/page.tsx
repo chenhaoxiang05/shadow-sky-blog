@@ -4,8 +4,11 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CommandPalette } from "./command-palette";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
 import {
+  readPostContent,
   selectCatalogArticle,
   selectSearchArticle,
+  toggleArticleInteraction,
+  type ArticleInteractions,
   type ArticleSelection,
   type PaletteDestination,
 } from "@/lib/command-palette";
@@ -13,10 +16,10 @@ import {
 type View = "home" | "articles" | "article" | "profile" | "bookmarks" | "studio" | "editor" | "admin" | "users" | "adminInvite" | "audit" | "login" | "invite" | "changePassword" | "forbidden";
 
 const articles = [
-  { title: "把一个 AI Agent 从 Demo 带到生产环境", excerpt: "从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。", author: "Lin Chen", initials: "LC", category: "AI Engineering", read: "8 min", date: "7 月 9 日", accent: "violet", featured: true, tags: ["Agent", "Production"] },
-  { title: "PostgreSQL 索引设计：一次真实的慢查询复盘", excerpt: "一个看似合理的复合索引，为什么让关键查询越来越慢？", author: "Mika", initials: "MK", category: "Backend", read: "11 min", date: "7 月 7 日", accent: "blue", featured: false, tags: ["PostgreSQL", "Performance"] },
-  { title: "用 Next.js 构建可迁移的内容平台", excerpt: "把运行时、存储和身份能力放在清晰的适配层后面。", author: "Sky Pan", initials: "SP", category: "Frontend", read: "6 min", date: "7 月 5 日", accent: "mint", featured: false, tags: ["Next.js", "Architecture"] },
-  { title: "我们如何组织每周技术共学", excerpt: "不追求信息量，追求可复用的知识沉淀与持续反馈。", author: "Alice Zhou", initials: "AZ", category: "Community", read: "5 min", date: "7 月 2 日", accent: "amber", featured: false, tags: ["Learning", "Team"] },
+  { title: "把一个 AI Agent 从 Demo 带到生产环境", excerpt: "从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。", author: "Lin Chen", initials: "LC", category: "AI Engineering", read: "8 min", readTime: "8 分钟阅读", date: "7 月 9 日", published: "2026 年 7 月 9 日", accent: "violet", featured: true, tags: ["Agent", "Production"], contentHtml: '<p class="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div class="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p>' },
+  { title: "PostgreSQL 索引设计：一次真实的慢查询复盘", excerpt: "一个看似合理的复合索引，为什么让关键查询越来越慢？", author: "Mika", initials: "MK", category: "Backend", read: "11 min", readTime: "11 分钟阅读", date: "7 月 7 日", published: "2026 年 7 月 7 日", accent: "blue", featured: false, tags: ["PostgreSQL", "Performance"], contentHtml: '<p class="lead">一次逐渐变慢的核心查询，让我们重新审视复合索引的列顺序、选择性和真实访问模式。</p><h2>从执行计划开始</h2><p>我们先对比高峰与低峰时段的 EXPLAIN ANALYZE，确认代价来自扫描范围扩大，而不是连接池或网络抖动。</p><h2>索引为何失效</h2><p>原索引把低选择性状态列放在首位，随着历史数据增长，数据库需要读取越来越多的索引页。</p><h2>验证与回滚</h2><p>新索引使用线上采样数据回放验证，并通过并发创建和明确回滚窗口降低变更风险。</p>' },
+  { title: "用 Next.js 构建可迁移的内容平台", excerpt: "把运行时、存储和身份能力放在清晰的适配层后面。", author: "Sky Pan", initials: "SP", category: "Frontend", read: "6 min", readTime: "6 分钟阅读", date: "7 月 5 日", published: "2026 年 7 月 5 日", accent: "mint", featured: false, tags: ["Next.js", "Architecture"], contentHtml: '<p class="lead">可迁移性不是放弃平台能力，而是让业务规则不依赖某一个部署环境。</p><h2>先划清边界</h2><p>身份、数据库、对象存储和搜索都通过稳定接口进入领域服务，页面只负责组合交互。</p><h2>保持服务端授权</h2><p>文章可见性和角色权限在服务端执行，迁移前后使用同一组策略测试验证。</p><h2>为 Azure 留出路径</h2><p>容器构建、环境变量和迁移命令保持显式，使预览环境验证过的代码可以平稳进入 Azure。</p>' },
+  { title: "我们如何组织每周技术共学", excerpt: "不追求信息量，追求可复用的知识沉淀与持续反馈。", author: "Alice Zhou", initials: "AZ", category: "Community", read: "5 min", readTime: "5 分钟阅读", date: "7 月 2 日", published: "2026 年 7 月 2 日", accent: "amber", featured: false, tags: ["Learning", "Team"], contentHtml: '<p class="lead">每周共学的目标不是塞满议程，而是把讨论转化为下一次还能使用的共同知识。</p><h2>一个小而稳定的节奏</h2><p>每位成员只带来一个问题、一段实践或一个失败案例，现场优先追问判断依据。</p><h2>会后形成可检索记录</h2><p>分享者整理结论、证据和未决问题，其他成员补充链接并完成轻量复核。</p><h2>用反馈改善下一轮</h2><p>我们记录哪些内容真正被项目复用，以此调整选题，而不是追求单次活动的信息量。</p>' },
 ];
 
 const categories = [
@@ -68,8 +71,7 @@ export default function Home() {
   const [generatedInviteLink, setGeneratedInviteLink] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [operatorRole, setOperatorRole] = useState<"OWNER" | "ADMIN">("ADMIN");
-  const [liked, setLiked] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
+  const [articleInteractions, setArticleInteractions] = useState<ArticleInteractions>({});
   const [commentBody, setCommentBody] = useState("");
   const [editorForm, setEditorForm] = useState({ title: "", summary: "", content: "# 开始写作\n\n把这次实践中最值得复用的判断记录下来。", visibility: "PUBLIC", tags: "Next.js, Architecture", coverImage: "" });
   const [saveState, setSaveState] = useState("尚未保存");
@@ -117,7 +119,7 @@ export default function Home() {
     navigate("article");
   }
 
-  function selectCommand(destination: PaletteDestination) {
+  async function selectCommand(destination: PaletteDestination) {
     if (destination.kind === "page") {
       navigate(destination.view);
       return;
@@ -134,8 +136,24 @@ export default function Home() {
       navigate("articles");
       return;
     }
-    setSelectedArticle(selectSearchArticle(destination.post));
-    navigate("article");
+    try {
+      const payload = await api(`/api/posts/${encodeURIComponent(destination.post.id)}`);
+      const contentHtml = readPostContent(payload);
+      if (contentHtml === null) throw new Error("文章正文暂时不可用");
+      setSelectedArticle(selectSearchArticle(destination.post, contentHtml));
+      navigate("article");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "文章暂时无法打开");
+    }
+  }
+
+  const selectedInteraction = articleInteractions[selectedArticle.id] ?? { liked: false, bookmarked: false };
+
+  function toggleSelectedInteraction(field: "liked" | "bookmarked") {
+    const next = !selectedInteraction[field];
+    setArticleInteractions((current) => toggleArticleInteraction(current, selectedArticle.id, field));
+    if (field === "liked") notify(next ? "已点赞" : "已取消点赞");
+    else notify(next ? "已加入我的收藏" : "已取消收藏");
   }
 
   function csrfToken() { return document.cookie.split(";").map((part) => part.trim().split("=")).find(([key]) => key === "shadow_sky_csrf")?.slice(1).join("=") ?? ""; }
@@ -243,9 +261,9 @@ export default function Home() {
 
         {view === "article" && <article className="reading-page page-enter">
           <button className="back-link" onClick={() => navigate("articles")}>← 返回文章</button>
-          <div className="article-hero"><span className="pill">{selectedArticle.tags[0] ?? "文章"}</span><h1>{selectedArticle.title}</h1><p>{selectedArticle.summary}</p><div className="article-byline"><Avatar initials="LC" /><div><b>Lin Chen</b><span>2026 年 7 月 9 日 · 8 分钟阅读</span></div><button onClick={() => { setLiked(!liked); notify(liked ? "已取消点赞" : "已点赞"); }}>{liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => { setBookmarked(!bookmarked); notify(bookmarked ? "已取消收藏" : "已加入我的收藏"); }}>{bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
-          <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>production_ready = evaluation + observability + boundaries</pre></div></div>
-          <div className="reading-layout"><aside><b>本文目录</b>{selectedArticle.source === "search" ? <span>正文标题将作为章节导航</span> : <><a href="#context">01 背景</a><a href="#evaluation">02 持续评估</a><a href="#boundary">03 权限边界</a><a href="#summary">04 总结</a></>}</aside>{selectedArticle.contentHtml ? <div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /> : <div className="prose"><p className="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div className="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p></div>}</div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
+          <div className="article-hero"><span className="pill">{selectedArticle.tags[0] ?? "文章"}</span><h1>{selectedArticle.title}</h1><p>{selectedArticle.summary}</p><div className="article-byline"><Avatar initials={selectedArticle.authorInitials} /><div><b>{selectedArticle.authorDisplayName}</b><span>{selectedArticle.publishedLabel} · {selectedArticle.readTimeLabel}</span></div><button onClick={() => toggleSelectedInteraction("liked")}>{selectedInteraction.liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => toggleSelectedInteraction("bookmarked")}>{selectedInteraction.bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
+          <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>{selectedArticle.tags.slice(0, 3).join(" + ") || "Shadow Sky Community"}</pre></div></div>
+          <div className="reading-layout"><aside><b>本文目录</b><span>正文标题将作为章节导航</span></aside><div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
         </article>}
 
         {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && <><label className="btn-secondary upload-button">上传封面<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button">插入正文图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
