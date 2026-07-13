@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
+  calculateReadingEnd,
   calculateReadingProgress,
+  createReadingFrameScheduler,
   findActiveReadingHeading,
   slugifyReadingHeading,
   uniqueReadingHeadingId,
@@ -26,7 +28,6 @@ export function ReadingExperience({ articleRef, active }: Props) {
     const article = articleRef.current;
     if (!article) return;
     const articleElement: HTMLElement = article;
-    let animationFrame = 0;
 
     function collectHeadings() {
       const used = new Set<string>();
@@ -49,7 +50,7 @@ export function ReadingExperience({ articleRef, active }: Props) {
     function updateReadingState() {
       const rect = articleElement.getBoundingClientRect();
       const start = window.scrollY + rect.top;
-      const end = start + Math.max(articleElement.scrollHeight - window.innerHeight, 1);
+      const end = calculateReadingEnd(start, articleElement.scrollHeight, window.innerHeight);
       const nextProgress = calculateReadingProgress(window.scrollY, start, end);
       const nextActiveId = findActiveReadingHeading(positionsRef.current, window.scrollY);
       setProgress(nextProgress);
@@ -67,22 +68,27 @@ export function ReadingExperience({ articleRef, active }: Props) {
       }
     }
 
-    function scheduleUpdate() {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(updateReadingState);
-    }
-
-    const initialFrame = window.requestAnimationFrame(() => {
-      collectHeadings();
-      updateReadingState();
+    const scheduler = createReadingFrameScheduler({
+      requestFrame: (callback) => window.requestAnimationFrame(callback),
+      cancelFrame: (frame) => window.cancelAnimationFrame(frame),
+      collectLayout: collectHeadings,
+      updateState: updateReadingState,
     });
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
+    const scheduleScrollUpdate = () => scheduler.schedule();
+    const scheduleLayoutUpdate = () => scheduler.schedule(true);
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleLayoutUpdate);
+
+    scheduler.schedule(true);
+    resizeObserver?.observe(articleElement);
+    window.addEventListener("scroll", scheduleScrollUpdate, { passive: true });
+    window.addEventListener("resize", scheduleLayoutUpdate);
+    window.addEventListener("orientationchange", scheduleLayoutUpdate);
     return () => {
-      window.cancelAnimationFrame(initialFrame);
-      window.cancelAnimationFrame(animationFrame);
-      window.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
+      scheduler.dispose();
+      resizeObserver?.disconnect();
+      window.removeEventListener("scroll", scheduleScrollUpdate);
+      window.removeEventListener("resize", scheduleLayoutUpdate);
+      window.removeEventListener("orientationchange", scheduleLayoutUpdate);
     };
   }, [active, articleRef]);
 

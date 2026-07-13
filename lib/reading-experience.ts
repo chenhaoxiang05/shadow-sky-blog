@@ -1,6 +1,44 @@
 export type ReadingHeading = { id: string; label: string; level: 2 | 3 };
 export type HeadingPosition = { id: string; top: number };
 
+type ReadingFrameSchedulerOptions = {
+  requestFrame: (callback: () => void) => number;
+  cancelFrame: (frame: number) => void;
+  collectLayout: () => void;
+  updateState: () => void;
+};
+
+export function createReadingFrameScheduler({
+  requestFrame,
+  cancelFrame,
+  collectLayout,
+  updateState,
+}: ReadingFrameSchedulerOptions) {
+  let frame = 0;
+  let layoutChanged = false;
+
+  function schedule(remeasureLayout = false) {
+    layoutChanged ||= remeasureLayout;
+    if (frame) cancelFrame(frame);
+    frame = requestFrame(() => {
+      frame = 0;
+      if (layoutChanged) {
+        layoutChanged = false;
+        collectLayout();
+      }
+      updateState();
+    });
+  }
+
+  function dispose() {
+    if (frame) cancelFrame(frame);
+    frame = 0;
+    layoutChanged = false;
+  }
+
+  return { schedule, dispose };
+}
+
 export function slugifyReadingHeading(value: string, fallbackIndex: number) {
   const slug = value
     .trim()
@@ -25,6 +63,10 @@ export function uniqueReadingHeadingId(base: string, used: Set<string>) {
 export function calculateReadingProgress(scrollY: number, start: number, end: number) {
   if (end <= start) return scrollY >= end ? 100 : 0;
   return Math.min(100, Math.max(0, ((scrollY - start) / (end - start)) * 100));
+}
+
+export function calculateReadingEnd(start: number, contentHeight: number, viewportHeight: number) {
+  return start + contentHeight - viewportHeight;
 }
 
 export function findActiveReadingHeading(positions: HeadingPosition[], scrollY: number, offset = 160) {
