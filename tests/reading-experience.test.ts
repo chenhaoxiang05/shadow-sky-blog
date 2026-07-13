@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   calculateReadingEnd,
@@ -137,4 +138,12 @@ test("移动目录先折叠并等待布局提交后再滚动到重新定位的�
 test("章节跳转遵守 reduced-motion 偏好", () => {
   assert.equal(readingScrollBehavior(true), "auto");
   assert.equal(readingScrollBehavior(false), "smooth");
+});
+
+test("切换文章会以新文章标识重新初始化目录测量", () => {
+  const component = readFileSync(new URL("../app/reading-experience.tsx", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(component, /articleKey: string/);
+  assert.match(component, /\[active, articleKey, articleRef\]/);
+  assert.match(page, /articleKey=\{selectedArticle\.id\}/);
 });
