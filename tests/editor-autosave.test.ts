@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  advanceEditorIdentityState,
   applyEditorMediaResult,
   appendContentImage,
+  createSingleFlightLock,
   createStoredEditorDraft,
   editorAsyncCompletionIsCurrent,
   editorAsyncTargetMatches,
   editorDraftCanEdit,
   editorDraftScope,
   editorDraftStorageKey,
+  editorIdentityRequestIsCurrent,
+  editorUnauthorizedInvalidatesIdentity,
   flushPendingEditorDraft,
   parseStoredEditorDraft,
   readEditorDraft,
@@ -190,4 +195,47 @@ test("媒体上传结果只应用到启动时的草稿并保留最新输入", ()
   assert.match(applied?.content ?? "", /上传期间继续输入/);
   assert.match(applied?.content ?? "", /!\[图片\]\(\/api\/media\/image\)$/);
   assert.equal(applyEditorMediaResult(switched, started, latest, "COVER", "/api/media/cover"), null);
+});
+
+test("媒体上传单飞锁会即时拒绝第二次启动并只允许持有者释放", () => {
+  const lock = createSingleFlightLock();
+  const first = lock.tryAcquire();
+  assert.equal(typeof first, "number");
+  assert.equal(lock.isLocked(), true);
+  assert.equal(lock.tryAcquire(), null);
+  assert.equal(lock.release((first ?? 0) + 1), false);
+  assert.equal(lock.isLocked(), true);
+  assert.equal(lock.release(first!), true);
+  assert.equal(lock.isLocked(), false);
+  assert.notEqual(lock.tryAcquire(), null);
+});
+
+test("401 身份失效会清空用户并递增 revision、generation 和 operation", () => {
+  const current = { revision: 7, operationId: 12, target: { userId: userOne, draftId: "post-a", generation: 4 } };
+  assert.equal(editorUnauthorizedInvalidatesIdentity(7, 7), true);
+  const invalidated = advanceEditorIdentityState(current, null);
+  assert.equal(invalidated.revision, 8);
+  assert.equal(invalidated.operationId, 13);
+  assert.equal(invalidated.target.userId, null);
+  assert.equal(invalidated.target.generation, 5);
+  assert.equal(editorAsyncCompletionIsCurrent(invalidated.target, current.target, invalidated.operationId, current.operationId), false);
+  assert.equal(editorUnauthorizedInvalidatesIdentity(8, 7), false);
+  assert.equal(editorUnauthorizedInvalidatesIdentity(7, 7, false), false);
+});
+
+test("迟到的初始 Session 或旧 401 不能覆盖较新的登录身份", () => {
+  const bootstrapRevision = 2;
+  const afterLogin = advanceEditorIdentityState({ revision: bootstrapRevision, operationId: 5, target: { userId: null, draftId: "new", generation: 1 } }, userTwo);
+  assert.equal(editorIdentityRequestIsCurrent(afterLogin.revision, bootstrapRevision), false);
+  assert.equal(editorUnauthorizedInvalidatesIdentity(afterLogin.revision, bootstrapRevision), false);
+  assert.equal(afterLogin.target.userId, userTwo);
+});
+
+test("媒体上传入口在单飞期间由 UI 原生 disabled", () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.equal([...source.matchAll(/<input[^>]*disabled=\{mediaUploadBusy \|\| busy\}/g)].length, 3);
+  assert.match(source, /editorMutationLock\.tryAcquire\(\)/);
+  assert.match(source, /invalidateIdentityOn401: false/);
+  assert.match(source, /localDraft\.suspendForIdentityLoss\(\)/);
+  assert.match(source, /new AbortController\(\)/);
 });

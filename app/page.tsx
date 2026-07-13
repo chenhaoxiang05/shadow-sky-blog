@@ -4,9 +4,13 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useEditorAutosave } from "./use-editor-autosave";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
 import {
+  advanceEditorIdentityState,
   applyEditorMediaResult,
+  createSingleFlightLock,
   editorAsyncCompletionIsCurrent,
   editorDraftCanEdit,
+  editorIdentityRequestIsCurrent,
+  editorUnauthorizedInvalidatesIdentity,
   serverSaveContainsLatestFields,
   type EditorAsyncTarget,
   type EditorDraftFields,
@@ -73,13 +77,18 @@ export default function Home() {
   const editorFormRef = useRef<EditorDraftFields>(initialEditorForm);
   const editorAsyncTargetRef = useRef<EditorAsyncTarget>({ userId: null, draftId: "new", generation: 0 });
   const editorOperationRef = useRef(0);
+  const editorIdentityRevisionRef = useRef(0);
+  const sessionBootstrapAbortRef = useRef<AbortController | null>(null);
   const [editorDraftId, setEditorDraftId] = useState("new");
   const [editorDirty, setEditorDirty] = useState(false);
   const [saveState, setSaveState] = useState("尚未保存");
   const [mediaUploadEnabled, setMediaUploadEnabled] = useState(false);
+  const [mediaUploadBusy, setMediaUploadBusy] = useState(false);
+  const [editorMutationLock] = useState(() => createSingleFlightLock());
   const [editorUserId, setEditorUserId] = useState<string | null>(null);
   const [editorIdentityResolved, setEditorIdentityResolved] = useState(false);
-  const localDraft = useEditorAutosave({ userId: editorUserId, draftId: editorDraftId, fields: editorForm, enabled: view === "editor" && editorIdentityResolved, dirty: editorDirty });
+  const [editorIdentityRevision, setEditorIdentityRevision] = useState(0);
+  const localDraft = useEditorAutosave({ userId: editorUserId, draftId: editorDraftId, fields: editorForm, enabled: view === "editor" && editorIdentityResolved, dirty: editorDirty, identityRevision: editorIdentityRevision });
 
   const filtered = useMemo(() => articles.filter((article) =>
     (filter === "全部" || article.category === filter) &&
@@ -113,15 +122,26 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/auth/session", { credentials: "include" }).then(async (response) => response.ok ? response.json() : null).then((data) => {
-      if (!active) return;
+    const controller = new AbortController();
+    const requestRevision = editorIdentityRevisionRef.current;
+    sessionBootstrapAbortRef.current = controller;
+    fetch("/api/auth/session", { credentials: "include", signal: controller.signal }).then(async (response) => response.ok ? response.json() : null).then((data) => {
+      if (!active || controller.signal.aborted || !editorIdentityRequestIsCurrent(editorIdentityRevisionRef.current, requestRevision)) return;
       const userId = typeof data?.user?.id === "string" ? data.user.id : null;
       editorOperationRef.current += 1;
       editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId, generation: editorAsyncTargetRef.current.generation + 1 };
       setEditorUserId(userId);
       if (data?.user?.role === "OWNER" || data?.user?.role === "ADMIN") setOperatorRole(data.user.role);
-    }).catch(() => { if (active) { editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId: null, generation: editorAsyncTargetRef.current.generation + 1 }; setEditorUserId(null); } }).finally(() => { if (active) setEditorIdentityResolved(true); });
-    return () => { active = false; };
+    }).catch(() => {
+      if (!active || controller.signal.aborted || !editorIdentityRequestIsCurrent(editorIdentityRevisionRef.current, requestRevision)) return;
+      editorOperationRef.current += 1;
+      editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId: null, generation: editorAsyncTargetRef.current.generation + 1 };
+      setEditorUserId(null);
+    }).finally(() => {
+      if (sessionBootstrapAbortRef.current === controller) sessionBootstrapAbortRef.current = null;
+      if (active && !controller.signal.aborted && editorIdentityRequestIsCurrent(editorIdentityRevisionRef.current, requestRevision)) setEditorIdentityResolved(true);
+    });
+    return () => { active = false; controller.abort(); if (sessionBootstrapAbortRef.current === controller) sessionBootstrapAbortRef.current = null; };
   }, []);
 
   function navigate(next: View) {
@@ -170,26 +190,57 @@ export default function Home() {
     notify("已放弃本地恢复内容");
   }
 
+  function applyEditorIdentity(userId: string | null, suspendCurrentDraft = false) {
+    if (suspendCurrentDraft) localDraft.suspendForIdentityLoss();
+    const next = advanceEditorIdentityState({ revision: editorIdentityRevisionRef.current, operationId: editorOperationRef.current, target: editorAsyncTargetRef.current }, userId);
+    editorIdentityRevisionRef.current = next.revision;
+    setEditorIdentityRevision(next.revision);
+    sessionBootstrapAbortRef.current?.abort();
+    sessionBootstrapAbortRef.current = null;
+    editorOperationRef.current = next.operationId;
+    editorAsyncTargetRef.current = next.target;
+    editorFormRef.current = initialEditorForm;
+    setEditorForm(initialEditorForm);
+    setEditorDirty(false);
+    setSaveState(userId ? "尚未保存" : "登录状态已失效");
+    setEditorUserId(userId);
+    setEditorIdentityResolved(true);
+    if (!userId) setOperatorRole("ADMIN");
+    if (suspendCurrentDraft) setBusy(false);
+  }
+
   function csrfToken() { return document.cookie.split(";").map((part) => part.trim().split("=")).find(([key]) => key === "shadow_sky_csrf")?.slice(1).join("=") ?? ""; }
-  async function api(path: string, init: RequestInit = {}) {
+  async function api(path: string, init: RequestInit = {}, options: { invalidateIdentityOn401?: boolean } = {}) {
+    const requestIdentityRevision = editorIdentityRevisionRef.current;
     const response = await fetch(path, { ...init, credentials: "include", headers: { ...(init.body instanceof FormData ? {} : { "content-type": "application/json" }), ...(init.method && init.method !== "GET" ? { "x-csrf-token": csrfToken() } : {}), ...init.headers } });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) { if (response.status === 401) notify("登录状态已失效，请重新登录"); throw new Error(data?.error?.message ?? "请求失败，请稍后重试"); }
+    if (!response.ok) {
+      if (response.status === 401 && editorUnauthorizedInvalidatesIdentity(editorIdentityRevisionRef.current, requestIdentityRevision, options.invalidateIdentityOn401 !== false)) {
+        applyEditorIdentity(null, true);
+        notify("登录状态已失效，请重新登录");
+        throw new Error("登录状态已失效，请重新登录");
+      }
+      throw new Error(data?.error?.message ?? "请求失败，请稍后重试");
+    }
     return data;
   }
-  async function submitLogin(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify(loginForm) }); const userId = typeof data.user.id === "string" ? data.user.id : null; editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId, generation: editorAsyncTargetRef.current.generation + 1 }; setEditorUserId(userId); setEditorIdentityResolved(true); if (data.user.role === "OWNER" || data.user.role === "ADMIN") setOperatorRole(data.user.role); if (data.user.mustChangePassword) { notify("请先修改管理员设置的临时密码"); navigate("changePassword"); } else { notify("登录成功"); navigate("studio"); } } catch (error) { notify(error instanceof Error ? error.message : "登录失败"); } finally { setBusy(false); } }
+  async function submitLogin(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify(loginForm) }, { invalidateIdentityOn401: false }); const userId = typeof data.user.id === "string" ? data.user.id : null; applyEditorIdentity(userId); if (data.user.role === "OWNER" || data.user.role === "ADMIN") setOperatorRole(data.user.role); if (data.user.mustChangePassword) { notify("请先修改管理员设置的临时密码"); navigate("changePassword"); } else { notify("登录成功"); navigate("studio"); } } catch (error) { notify(error instanceof Error ? error.message : "登录失败"); } finally { setBusy(false); } }
   async function submitInvite(event: FormEvent) { event.preventDefault(); setBusy(true); try { await api("/api/auth/invite", { method: "POST", body: JSON.stringify(inviteForm) }); notify("注册成功，请使用新账户登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "邀请无效"); } finally { setBusy(false); } }
-  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, userId: null, generation: editorAsyncTargetRef.current.generation + 1 }; setEditorUserId(null); setEditorIdentityResolved(true); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
+  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); applyEditorIdentity(null, true); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
   async function createAdminInvitation(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/admin/invitations", { method: "POST", body: JSON.stringify(adminInviteForm) }); setGeneratedInviteLink(data.inviteLink); notify("一次性邀请已生成"); } catch (error) { notify(error instanceof Error ? error.message : "创建邀请失败"); } finally { setBusy(false); } }
   async function resetUserPassword(userId: string) { setBusy(true); try { const data = await api("/api/admin/users/reset-password", { method: "POST", body: JSON.stringify({ userId }) }); setTemporaryPassword(data.temporaryPassword); notify("临时密码已生成，旧 Session 已撤销"); } catch (error) { notify(error instanceof Error ? error.message : "重置失败"); } finally { setBusy(false); } }
   async function uploadImage(file: File, purpose: "AVATAR" | "COVER" | "CONTENT") {
+    const uploadToken = editorMutationLock.tryAcquire();
+    if (uploadToken === null) { notify("已有图片正在上传，请稍候"); return; }
+    setMediaUploadBusy(true);
     const started = { ...editorAsyncTargetRef.current };
     const operationId = ++editorOperationRef.current;
     const isCurrent = () => purpose === "AVATAR"
       ? editorOperationRef.current === operationId
       : editorAsyncCompletionIsCurrent(editorAsyncTargetRef.current, started, editorOperationRef.current, operationId);
-    const form = new FormData(); form.set("file", file); form.set("purpose", purpose); setBusy(true);
+    setBusy(true);
     try {
+      const form = new FormData(); form.set("file", file); form.set("purpose", purpose);
       const data = await api("/api/media", { method: "POST", body: form });
       if (purpose === "AVATAR") {
         await api("/api/profile", { method: "PATCH", body: JSON.stringify({ avatarKey: data.asset.url }) });
@@ -206,10 +257,15 @@ export default function Home() {
         setSaveState("有未保存的修改");
       }
       if (isCurrent()) notify("图片已安全上传");
-    } catch (error) { if (isCurrent()) notify(error instanceof Error ? error.message : "上传失败"); } finally { if (isCurrent()) setBusy(false); }
+    } catch (error) { if (isCurrent()) notify(error instanceof Error ? error.message : "上传失败"); } finally {
+      if (editorMutationLock.release(uploadToken)) setMediaUploadBusy(false);
+      if (isCurrent()) setBusy(false);
+    }
   }
 
   async function createDraft(action: "SAVE" | "SUBMIT") {
+    const mutationToken = editorMutationLock.tryAcquire();
+    if (mutationToken === null) { notify("编辑器正在处理另一项操作，请稍候"); return; }
     const started = { ...editorAsyncTargetRef.current };
     const operationId = ++editorOperationRef.current;
     const isCurrent = () => editorAsyncCompletionIsCurrent(editorAsyncTargetRef.current, started, editorOperationRef.current, operationId);
@@ -237,7 +293,7 @@ export default function Home() {
         setSaveState("保存失败，本地草稿仍保留");
         notify(error instanceof Error ? error.message : "保存失败");
       }
-    } finally { if (isCurrent()) setBusy(false); }
+    } finally { editorMutationLock.release(mutationToken); if (isCurrent()) setBusy(false); }
   }
 
   return (
@@ -320,9 +376,9 @@ export default function Home() {
           <div className="reading-layout"><aside><b>本文目录</b><a href="#context">01 背景</a><a href="#evaluation">02 持续评估</a><a href="#boundary">03 权限边界</a><a href="#summary">04 总结</a></aside><div className="prose"><p className="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div className="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p></div></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
         </article>}
 
-        {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && editorCanEdit && <><label className="btn-secondary upload-button">上传封面<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button">插入正文图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
+        {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadBusy ? "图片正在上传；完成前不能开始第二个上传。" : mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && editorCanEdit && <><label className="btn-secondary upload-button" aria-disabled={mediaUploadBusy || busy}>上传封面<input type="file" disabled={mediaUploadBusy || busy} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button" aria-disabled={mediaUploadBusy || busy}>插入正文图片<input type="file" disabled={mediaUploadBusy || busy} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
 
-        {view === "profile" && <section className="page section page-enter"><div className="profile-hero"><Avatar initials="SP" /><div><h1>Sky Pan</h1><p>@sky_pan · 关注云原生、Next.js 与高质量技术社区。正在把群聊里的灵感变成长期知识。</p><p><a href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://shadowskypan.asia" target="_blank" rel="noreferrer">个人网站</a></p><div className="profile-stats"><span><b>18</b>公开文章</span><span><b>1.2k</b>获赞</span></div></div>{mediaUploadEnabled && <label className="btn-secondary upload-button">更新头像<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "AVATAR")} /></label>}</div><div className="profile-tabs"><button className="selected">文章</button><button onClick={() => navigate("bookmarks")}>我的收藏</button><button>关于</button></div><div className="cards-grid">{articles.slice(0, 3).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div></section>}
+        {view === "profile" && <section className="page section page-enter"><div className="profile-hero"><Avatar initials="SP" /><div><h1>Sky Pan</h1><p>@sky_pan · 关注云原生、Next.js 与高质量技术社区。正在把群聊里的灵感变成长期知识。</p><p><a href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://shadowskypan.asia" target="_blank" rel="noreferrer">个人网站</a></p><div className="profile-stats"><span><b>18</b>公开文章</span><span><b>1.2k</b>获赞</span></div></div>{mediaUploadEnabled && <label className="btn-secondary upload-button" aria-disabled={mediaUploadBusy || busy}>更新头像<input type="file" disabled={mediaUploadBusy || busy} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "AVATAR")} /></label>}</div><div className="profile-tabs"><button className="selected">文章</button><button onClick={() => navigate("bookmarks")}>我的收藏</button><button>关于</button></div><div className="cards-grid">{articles.slice(0, 3).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div></section>}
 
         {view === "bookmarks" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">PRIVATE LIBRARY</span><h1>我的收藏</h1><p>收藏列表会重新执行文章可见性检查，不能用于读取已失去权限的内容。</p></div><button className="btn-secondary" onClick={() => navigate("profile")}>返回个人主页</button></div><div className="cards-grid">{articles.slice(0, 2).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div></section>}
 

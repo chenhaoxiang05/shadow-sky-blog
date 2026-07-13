@@ -18,6 +18,18 @@ export type EditorAsyncTarget = {
   generation: number;
 };
 
+export type SingleFlightLock = {
+  tryAcquire(): number | null;
+  release(token: number): boolean;
+  isLocked(): boolean;
+};
+
+export type EditorIdentityState = {
+  revision: number;
+  operationId: number;
+  target: EditorAsyncTarget;
+};
+
 export type StoredEditorDraft = {
   version: 2;
   userId: string;
@@ -148,6 +160,42 @@ export function editorAsyncCompletionIsCurrent(
   startedOperationId: number,
 ) {
   return activeOperationId === startedOperationId && editorAsyncTargetMatches(active, started);
+}
+
+export function editorIdentityRequestIsCurrent(activeRevision: number, requestRevision: number) {
+  return activeRevision === requestRevision;
+}
+
+export function editorUnauthorizedInvalidatesIdentity(activeRevision: number, requestRevision: number, enabled = true) {
+  return enabled && editorIdentityRequestIsCurrent(activeRevision, requestRevision);
+}
+
+export function advanceEditorIdentityState(current: EditorIdentityState, userId: string | null): EditorIdentityState {
+  return {
+    revision: current.revision + 1,
+    operationId: current.operationId + 1,
+    target: { ...current.target, userId, generation: current.target.generation + 1 },
+  };
+}
+
+export function createSingleFlightLock(): SingleFlightLock {
+  let sequence = 0;
+  let activeToken: number | null = null;
+  return {
+    tryAcquire() {
+      if (activeToken !== null) return null;
+      activeToken = ++sequence;
+      return activeToken;
+    },
+    release(token) {
+      if (activeToken !== token) return false;
+      activeToken = null;
+      return true;
+    },
+    isLocked() {
+      return activeToken !== null;
+    },
+  };
 }
 
 export function applyEditorMediaResult(

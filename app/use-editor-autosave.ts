@@ -48,26 +48,30 @@ export function useEditorAutosave(input: {
   fields: EditorDraftFields;
   enabled: boolean;
   dirty: boolean;
+  identityRevision: number;
 }) {
   const scope = input.enabled ? editorDraftScope(input.userId, input.draftId) : null;
   const currentScopeKey = scopeKey(scope);
+  const currentLifecycleKey = currentScopeKey ? `${currentScopeKey}#${input.identityRevision}` : null;
   const [recovery, setRecovery] = useState<StoredEditorDraft | null>(null);
   const [status, setStatus] = useState<AutosaveStatus>("idle");
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [loadedScopeKey, setLoadedScopeKey] = useState<string | null>(null);
   const activeDraftRef = useRef<ActiveDraft | null>(null);
+  const suspendedScopeKeyRef = useRef<string | null>(null);
   const visibleRecovery = recovery
     && scope
     && recovery.userId === scope.userId
     && recovery.draftId === scope.draftId
     ? recovery
     : null;
-  const ready = Boolean(currentScopeKey && loadedScopeKey === currentScopeKey);
+  const ready = Boolean(currentLifecycleKey && loadedScopeKey === currentLifecycleKey);
   const visibleStatus = status === "recovery" && !visibleRecovery ? "idle" : status;
 
   useEffect(() => {
-    if (!scope || !currentScopeKey) return;
+    if (!scope || !currentLifecycleKey) return;
     const frame = window.requestAnimationFrame(() => {
+      if (suspendedScopeKeyRef.current === currentLifecycleKey) return;
       try {
         const stored = readEditorDraft(window.localStorage, scope);
         setRecovery(stored);
@@ -77,16 +81,17 @@ export function useEditorAutosave(input: {
         setRecovery(null);
         setStatus("error");
       } finally {
-        setLoadedScopeKey(currentScopeKey);
+        setLoadedScopeKey(currentLifecycleKey);
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [currentScopeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentLifecycleKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
-    if (!scope || !currentScopeKey) return;
+    if (!scope || !currentLifecycleKey) return;
+    suspendedScopeKeyRef.current = null;
     activeDraftRef.current = {
-      key: currentScopeKey,
+      key: currentLifecycleKey,
       scope,
       fields: input.fields,
       dirty: input.dirty,
@@ -94,20 +99,20 @@ export function useEditorAutosave(input: {
     };
     return () => {
       const active = activeDraftRef.current;
-      if (active?.key === currentScopeKey) {
+      if (active?.key === currentLifecycleKey) {
         flushActiveDraft(active);
         activeDraftRef.current = null;
       }
     };
-  }, [currentScopeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentLifecycleKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     const active = activeDraftRef.current;
-    if (!scope || !currentScopeKey || active?.key !== currentScopeKey) return;
+    if (!scope || !currentLifecycleKey || active?.key !== currentLifecycleKey) return;
     active.fields = input.fields;
     active.dirty = input.dirty;
     active.recoveryPending = Boolean(visibleRecovery);
-  }, [currentScopeKey, input.dirty, input.fields, visibleRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentLifecycleKey, input.dirty, input.fields, visibleRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onPageHide = () => { flushActiveDraft(activeDraftRef.current); };
@@ -116,8 +121,9 @@ export function useEditorAutosave(input: {
   }, []);
 
   useEffect(() => {
-    if (!scope || !currentScopeKey || !ready || !input.dirty || visibleRecovery) return;
+    if (!scope || !currentLifecycleKey || !ready || !input.dirty || visibleRecovery) return;
     const timer = window.setTimeout(() => {
+      if (suspendedScopeKeyRef.current === currentLifecycleKey) return;
       setStatus("saving");
       try {
         const result = writeEditorDraftIfChanged(window.localStorage, scope, input.fields);
@@ -128,11 +134,11 @@ export function useEditorAutosave(input: {
       }
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [currentScopeKey, input.dirty, input.fields, ready, visibleRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentLifecycleKey, input.dirty, input.fields, ready, visibleRecovery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function acceptRecovery() {
     const fields = visibleRecovery?.fields ?? null;
-    if (activeDraftRef.current?.key === currentScopeKey) activeDraftRef.current.recoveryPending = false;
+    if (activeDraftRef.current?.key === currentLifecycleKey) activeDraftRef.current.recoveryPending = false;
     setRecovery(null);
     setStatus(fields ? "saved" : "idle");
     return fields;
@@ -142,7 +148,7 @@ export function useEditorAutosave(input: {
     if (!scope) return;
     try {
       removeEditorDraft(window.localStorage, scope);
-      if (activeDraftRef.current?.key === currentScopeKey) activeDraftRef.current.recoveryPending = false;
+      if (activeDraftRef.current?.key === currentLifecycleKey) activeDraftRef.current.recoveryPending = false;
       setRecovery(null);
       setSavedAt(null);
       setStatus("idle");
@@ -155,7 +161,7 @@ export function useEditorAutosave(input: {
     if (!scope) return;
     try {
       removeEditorDraftIfFieldsMatch(window.localStorage, scope, savedFields);
-      if (activeDraftRef.current?.key === currentScopeKey) activeDraftRef.current.dirty = false;
+      if (activeDraftRef.current?.key === currentLifecycleKey) activeDraftRef.current.dirty = false;
       setRecovery(null);
       setSavedAt(null);
       setStatus("idle");
@@ -168,7 +174,7 @@ export function useEditorAutosave(input: {
     if (!scope || visibleRecovery) return null;
     try {
       const result = writeEditorDraftIfChanged(window.localStorage, scope, fields);
-      if (activeDraftRef.current?.key === currentScopeKey) {
+      if (activeDraftRef.current?.key === currentLifecycleKey) {
         activeDraftRef.current.fields = fields;
         activeDraftRef.current.dirty = true;
       }
@@ -181,5 +187,15 @@ export function useEditorAutosave(input: {
     }
   }
 
-  return { recovery: visibleRecovery, status: visibleStatus, savedAt, ready, acceptRecovery, discardRecovery, clearAfterServerSave, persistNow };
+  function suspendForIdentityLoss() {
+    if (!currentLifecycleKey) return;
+    suspendedScopeKeyRef.current = currentLifecycleKey;
+    activeDraftRef.current = null;
+    setRecovery(null);
+    setLoadedScopeKey(null);
+    setSavedAt(null);
+    setStatus("idle");
+  }
+
+  return { recovery: visibleRecovery, status: visibleStatus, savedAt, ready, acceptRecovery, discardRecovery, clearAfterServerSave, persistNow, suspendForIdentityLoss };
 }
