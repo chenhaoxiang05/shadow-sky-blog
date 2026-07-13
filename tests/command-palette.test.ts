@@ -3,17 +3,22 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   buildPaletteItems,
+  createArticleLoadCoordinator,
   createPaletteSearchCoordinator,
   isPaletteShortcut,
   movePaletteIndex,
   normalizePaletteQuery,
   paletteShortcutAction,
+  readArticleDiscussion,
   readPostContent,
   readSearchPosts,
   selectCatalogArticle,
   selectSearchArticle,
   shouldChoosePaletteItem,
+  submitArticleComment,
   toggleArticleInteraction,
+  updateArticleCommentDraft,
+  type ArticleDiscussions,
   type SearchPost,
 } from "../lib/command-palette";
 
@@ -206,4 +211,38 @@ test("搜索文章选择后显示其作者、日期和阅读时长", () => {
   assert.equal(selected.authorInitials, "MC");
   assert.equal(selected.publishedLabel, "2026年7月7日");
   assert.equal(selected.readTimeLabel, "11 分钟阅读");
+});
+
+test("慢文章详情响应在目录文章或导航后不能覆盖较新的选择", () => {
+  const coordinator = createArticleLoadCoordinator();
+  const slowPaletteRequest = coordinator.begin();
+  let selectedTitle = "目录文章";
+  coordinator.invalidate();
+
+  assert.equal(slowPaletteRequest.signal.aborted, true);
+  assert.equal(coordinator.isCurrent(slowPaletteRequest), false);
+  if (coordinator.isCurrent(slowPaletteRequest)) selectedTitle = "过期命令面板文章";
+  assert.equal(selectedTitle, "目录文章");
+
+  const currentRequest = coordinator.begin();
+  assert.equal(coordinator.isCurrent(currentRequest), true);
+  coordinator.finish(currentRequest);
+});
+
+test("评论草稿和讨论记录按文章 ID 隔离", () => {
+  let discussions: ArticleDiscussions = {
+    "article-a": { draft: "", comments: [{ id: "mika-a", author: "Mika", initials: "MK", body: "只属于 A" }] },
+  };
+  discussions = updateArticleCommentDraft(discussions, "article-a", "A 的未提交草稿");
+  assert.equal(readArticleDiscussion(discussions, "article-b").draft, "");
+  assert.deepEqual(readArticleDiscussion(discussions, "article-b").comments, []);
+
+  discussions = updateArticleCommentDraft(discussions, "article-b", "B 的草稿");
+  discussions = submitArticleComment(discussions, "article-b", { id: "member-b", author: "当前成员", initials: "ME", body: "B 的评论" });
+  assert.equal(readArticleDiscussion(discussions, "article-a").draft, "A 的未提交草稿");
+  assert.deepEqual(readArticleDiscussion(discussions, "article-a").comments.map((comment) => comment.body), ["只属于 A"]);
+  assert.deepEqual(readArticleDiscussion(discussions, "article-b"), {
+    draft: "",
+    comments: [{ id: "member-b", author: "当前成员", initials: "ME", body: "B 的评论" }],
+  });
 });

@@ -109,6 +109,50 @@ export function toggleArticleInteraction(
   return { ...interactions, [articleId]: { ...current, [field]: !current[field] } };
 }
 
+export type ArticleComment = { id: string; author: string; initials: string; body: string };
+export type ArticleDiscussion = { draft: string; comments: ArticleComment[] };
+export type ArticleDiscussions = Record<string, ArticleDiscussion>;
+
+export function readArticleDiscussion(discussions: ArticleDiscussions, articleId: string): ArticleDiscussion {
+  return discussions[articleId] ?? { draft: "", comments: [] };
+}
+
+export function updateArticleCommentDraft(discussions: ArticleDiscussions, articleId: string, draft: string): ArticleDiscussions {
+  const current = readArticleDiscussion(discussions, articleId);
+  return { ...discussions, [articleId]: { ...current, draft } };
+}
+
+export function submitArticleComment(discussions: ArticleDiscussions, articleId: string, comment: ArticleComment): ArticleDiscussions {
+  const current = readArticleDiscussion(discussions, articleId);
+  return { ...discussions, [articleId]: { draft: "", comments: [...current.comments, comment] } };
+}
+
+export type ArticleLoadRequest = Readonly<{ generation: number; signal: AbortSignal }>;
+
+export function createArticleLoadCoordinator() {
+  let generation = 0;
+  let controller: AbortController | null = null;
+  return {
+    begin(): ArticleLoadRequest {
+      controller?.abort();
+      controller = new AbortController();
+      generation += 1;
+      return { generation, signal: controller.signal };
+    },
+    invalidate() {
+      generation += 1;
+      controller?.abort();
+      controller = null;
+    },
+    isCurrent(request: ArticleLoadRequest) {
+      return request.generation === generation && !request.signal.aborted;
+    },
+    finish(request: ArticleLoadRequest) {
+      if (request.generation === generation) controller = null;
+    },
+  };
+}
+
 export function readSearchPosts(payload: unknown): SearchPost[] {
   if (!payload || typeof payload !== "object" || !("posts" in payload) || !Array.isArray(payload.posts)) return [];
   return payload.posts.flatMap((candidate) => {

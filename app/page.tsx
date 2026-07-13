@@ -4,10 +4,15 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CommandPalette } from "./command-palette";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
 import {
+  createArticleLoadCoordinator,
+  readArticleDiscussion,
   readPostContent,
   selectCatalogArticle,
   selectSearchArticle,
+  submitArticleComment,
   toggleArticleInteraction,
+  updateArticleCommentDraft,
+  type ArticleDiscussions,
   type ArticleInteractions,
   type ArticleSelection,
   type PaletteDestination,
@@ -32,6 +37,13 @@ const authors = [
 
 const paletteCategories = categories.map(([name]) => name);
 const paletteTags = Array.from(new Set(articles.flatMap((article) => article.tags)));
+const initialArticleSelection = selectCatalogArticle(articles[0]);
+const initialArticleDiscussions: ArticleDiscussions = {
+  [initialArticleSelection.id]: {
+    draft: "",
+    comments: [{ id: "featured-mika", author: "Mika", initials: "MK", body: "权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。" }],
+  },
+};
 
 const delegatedRoles = ["MEMBER", "CONTRIBUTOR", "AUTHOR", "EDITOR"] as const;
 
@@ -62,7 +74,8 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<ArticleSelection>(() => selectCatalogArticle(articles[0]));
+  const [selectedArticle, setSelectedArticle] = useState<ArticleSelection>(initialArticleSelection);
+  const articleLoadCoordinatorRef = useRef(createArticleLoadCoordinator());
   const [busy, setBusy] = useState(false);
   const [loginForm, setLoginForm] = useState({ login: "", password: "" });
   const [inviteForm, setInviteForm] = useState({ token: "", handle: "", displayName: "", password: "", confirmPassword: "" });
@@ -72,7 +85,7 @@ export default function Home() {
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [operatorRole, setOperatorRole] = useState<"OWNER" | "ADMIN">("ADMIN");
   const [articleInteractions, setArticleInteractions] = useState<ArticleInteractions>({});
-  const [commentBody, setCommentBody] = useState("");
+  const [articleDiscussions, setArticleDiscussions] = useState<ArticleDiscussions>(initialArticleDiscussions);
   const [editorForm, setEditorForm] = useState({ title: "", summary: "", content: "# 开始写作\n\n把这次实践中最值得复用的判断记录下来。", visibility: "PUBLIC", tags: "Next.js, Architecture", coverImage: "" });
   const [saveState, setSaveState] = useState("尚未保存");
   const [mediaUploadEnabled, setMediaUploadEnabled] = useState(false);
@@ -86,6 +99,7 @@ export default function Home() {
     const token = new URLSearchParams(window.location.search).get("token");
     if (!token) return;
     const timer = window.setTimeout(() => {
+      articleLoadCoordinatorRef.current.invalidate();
       setInviteForm((current) => ({ ...current, token }));
       setView("invite");
     }, 0);
@@ -106,7 +120,10 @@ export default function Home() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => () => articleLoadCoordinatorRef.current.invalidate(), []);
+
   function navigate(next: View) {
+    articleLoadCoordinatorRef.current.invalidate();
     setView(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -136,24 +153,47 @@ export default function Home() {
       navigate("articles");
       return;
     }
+    const request = articleLoadCoordinatorRef.current.begin();
     try {
-      const payload = await api(`/api/posts/${encodeURIComponent(destination.post.id)}`);
+      const payload = await api(`/api/posts/${encodeURIComponent(destination.post.id)}`, { signal: request.signal });
+      if (!articleLoadCoordinatorRef.current.isCurrent(request)) return;
       const contentHtml = readPostContent(payload);
       if (contentHtml === null) throw new Error("文章正文暂时不可用");
       setSelectedArticle(selectSearchArticle(destination.post, contentHtml));
       navigate("article");
     } catch (error) {
+      if (request.signal.aborted || !articleLoadCoordinatorRef.current.isCurrent(request)) return;
       notify(error instanceof Error ? error.message : "文章暂时无法打开");
+    } finally {
+      articleLoadCoordinatorRef.current.finish(request);
     }
   }
 
   const selectedInteraction = articleInteractions[selectedArticle.id] ?? { liked: false, bookmarked: false };
+  const selectedDiscussion = readArticleDiscussion(articleDiscussions, selectedArticle.id);
 
   function toggleSelectedInteraction(field: "liked" | "bookmarked") {
     const next = !selectedInteraction[field];
     setArticleInteractions((current) => toggleArticleInteraction(current, selectedArticle.id, field));
     if (field === "liked") notify(next ? "已点赞" : "已取消点赞");
     else notify(next ? "已加入我的收藏" : "已取消收藏");
+  }
+
+  function updateSelectedCommentDraft(body: string) {
+    setArticleDiscussions((current) => updateArticleCommentDraft(current, selectedArticle.id, body));
+  }
+
+  function submitSelectedComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const body = selectedDiscussion.draft.trim();
+    if (!body) return;
+    setArticleDiscussions((current) => submitArticleComment(current, selectedArticle.id, {
+      id: crypto.randomUUID(),
+      author: "当前成员",
+      initials: "ME",
+      body,
+    }));
+    notify("评论已提交");
   }
 
   function csrfToken() { return document.cookie.split(";").map((part) => part.trim().split("=")).find(([key]) => key === "shadow_sky_csrf")?.slice(1).join("=") ?? ""; }
@@ -263,7 +303,7 @@ export default function Home() {
           <button className="back-link" onClick={() => navigate("articles")}>← 返回文章</button>
           <div className="article-hero"><span className="pill">{selectedArticle.tags[0] ?? "文章"}</span><h1>{selectedArticle.title}</h1><p>{selectedArticle.summary}</p><div className="article-byline"><Avatar initials={selectedArticle.authorInitials} /><div><b>{selectedArticle.authorDisplayName}</b><span>{selectedArticle.publishedLabel} · {selectedArticle.readTimeLabel}</span></div><button onClick={() => toggleSelectedInteraction("liked")}>{selectedInteraction.liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => toggleSelectedInteraction("bookmarked")}>{selectedInteraction.bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
           <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>{selectedArticle.tags.slice(0, 3).join(" + ") || "Shadow Sky Community"}</pre></div></div>
-          <div className="reading-layout"><aside><b>本文目录</b><span>正文标题将作为章节导航</span></aside><div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
+          <div className="reading-layout"><aside><b>本文目录</b><span>正文标题将作为章节导航</span></aside><div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={submitSelectedComment}><textarea value={selectedDiscussion.draft} onChange={(event) => updateSelectedCommentDraft(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form>{selectedDiscussion.comments.length ? selectedDiscussion.comments.map((comment) => <div className="comment-item" key={comment.id}><Avatar initials={comment.initials} small /><div><b>{comment.author}</b><p>{comment.body}</p><button>回复</button></div></div>) : <div className="empty-mini">这篇文章还没有讨论，来写下第一条评论吧。</div>}</section>
         </article>}
 
         {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && <><label className="btn-secondary upload-button">上传封面<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button">插入正文图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
