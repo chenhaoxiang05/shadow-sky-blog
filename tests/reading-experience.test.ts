@@ -173,6 +173,7 @@ test("移动端保留阅读目录而只隐藏其他辅助侧栏", () => {
   assert.match(styles, /\.reading-layout aside:not\(\.reading-toc\)\{display:none\}/);
   assert.doesNotMatch(styles, /\.reading-layout aside\{display:none\}/);
   assert.match(styles, /\.reading-toc\{[^}]*max-height:calc\(100vh - 124px\)[^}]*overflow-y:auto/);
+  assert.match(styles, /\.reading-toc\{position:static;max-height:none;[^}]*overflow:hidden\}/);
 });
 
 test("阅读进度和重排观察都使用正文边界", () => {
