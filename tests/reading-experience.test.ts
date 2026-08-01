@@ -147,3 +147,9 @@ test("切换文章会以新文章标识重新初始化目录测量", () => {
   assert.match(component, /\[active, articleKey, articleRef\]/);
   assert.match(page, /articleKey=\{selectedArticle\.id\}/);
 });
+
+test("移动端保留阅读目录而只隐藏其他辅助侧栏", () => {
+  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.reading-layout aside:not\(\.reading-toc\)\{display:none\}/);
+  assert.doesNotMatch(styles, /\.reading-layout aside\{display:none\}/);
+});
