@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CommandPalette } from "./command-palette";
+import { ReadingExperience } from "./reading-experience";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
 import {
   createArticleLoadCoordinator,
@@ -68,6 +69,7 @@ function ArticleCard({ article, onOpen }: { article: (typeof articles)[number]; 
 export default function Home() {
   const [view, setView] = useState<View>("home");
   const themeButtonRef = useRef<HTMLButtonElement>(null);
+  const readingArticleRef = useRef<HTMLElement>(null);
   const { theme, toggleTheme, toggleLabel } = useRadialThemeTransition(themeButtonRef);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("全部");
@@ -124,6 +126,7 @@ export default function Home() {
 
   function navigate(next: View) {
     articleLoadCoordinatorRef.current.invalidate();
+    if (next !== "article" && window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     setView(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -132,7 +135,11 @@ export default function Home() {
   }
 
   function openCatalogArticle(article: (typeof articles)[number]) {
-    setSelectedArticle(selectCatalogArticle(article));
+    const nextArticle = selectCatalogArticle(article);
+    if (nextArticle.id !== selectedArticle.id && window.location.hash) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+    setSelectedArticle(nextArticle);
     navigate("article");
   }
 
@@ -159,7 +166,11 @@ export default function Home() {
       if (!articleLoadCoordinatorRef.current.isCurrent(request)) return;
       const contentHtml = readPostContent(payload);
       if (contentHtml === null) throw new Error("文章正文暂时不可用");
-      setSelectedArticle(selectSearchArticle(destination.post, contentHtml));
+      const nextArticle = selectSearchArticle(destination.post, contentHtml);
+      if (nextArticle.id !== selectedArticle.id && window.location.hash) {
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
+      setSelectedArticle(nextArticle);
       navigate("article");
     } catch (error) {
       if (request.signal.aborted || !articleLoadCoordinatorRef.current.isCurrent(request)) return;
@@ -299,11 +310,11 @@ export default function Home() {
           {!filtered.length && <div className="empty-state"><span>⌕</span><h3>没有找到相关内容</h3><p>试试更短的关键词或其他分类。</p></div>}
         </section>}
 
-        {view === "article" && <article className="reading-page page-enter">
+        {view === "article" && <article ref={readingArticleRef} className="reading-page page-enter">
           <button className="back-link" onClick={() => navigate("articles")}>← 返回文章</button>
           <div className="article-hero"><span className="pill">{selectedArticle.tags[0] ?? "文章"}</span><h1>{selectedArticle.title}</h1><p>{selectedArticle.summary}</p><div className="article-byline"><Avatar initials={selectedArticle.authorInitials} /><div><b>{selectedArticle.authorDisplayName}</b><span>{selectedArticle.publishedLabel} · {selectedArticle.readTimeLabel}</span></div><button onClick={() => toggleSelectedInteraction("liked")}>{selectedInteraction.liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => toggleSelectedInteraction("bookmarked")}>{selectedInteraction.bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
           <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>{selectedArticle.tags.slice(0, 3).join(" + ") || "Shadow Sky Community"}</pre></div></div>
-          <div className="reading-layout"><aside><b>本文目录</b><span>正文标题将作为章节导航</span></aside><div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={submitSelectedComment}><textarea value={selectedDiscussion.draft} onChange={(event) => updateSelectedCommentDraft(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form>{selectedDiscussion.comments.length ? selectedDiscussion.comments.map((comment) => <div className="comment-item" key={comment.id}><Avatar initials={comment.initials} small /><div><b>{comment.author}</b><p>{comment.body}</p><button>回复</button></div></div>) : <div className="empty-mini">这篇文章还没有讨论，来写下第一条评论吧。</div>}</section>
+          <div className="reading-layout"><ReadingExperience key={selectedArticle.id} articleRef={readingArticleRef} active={view === "article"} articleKey={selectedArticle.id} /><div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={submitSelectedComment}><textarea value={selectedDiscussion.draft} onChange={(event) => updateSelectedCommentDraft(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form>{selectedDiscussion.comments.length ? selectedDiscussion.comments.map((comment) => <div className="comment-item" key={comment.id}><Avatar initials={comment.initials} small /><div><b>{comment.author}</b><p>{comment.body}</p><button>回复</button></div></div>) : <div className="empty-mini">这篇文章还没有讨论，来写下第一条评论吧。</div>}</section>
         </article>}
 
         {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && <><label className="btn-secondary upload-button">上传封面<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button">插入正文图片<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
