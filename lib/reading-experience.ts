@@ -50,6 +50,16 @@ export function readingScrollBehavior(reducedMotion: boolean): ScrollBehavior {
   return reducedMotion ? "auto" : "smooth";
 }
 
+type ReadingHeadingTarget = {
+  focus: (options?: FocusOptions) => void;
+  scrollIntoView: (options?: ScrollIntoViewOptions) => void;
+};
+
+export function focusAndScrollReadingHeading(target: ReadingHeadingTarget, behavior: ScrollBehavior) {
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ behavior, block: "start" });
+}
+
 export function createReadingFrameScheduler({
   requestFrame,
   cancelFrame,
@@ -109,6 +119,10 @@ export function calculateReadingProgress(scrollY: number, start: number, end: nu
 
 export function calculateReadingEnd(start: number, contentHeight: number, viewportHeight: number) {
   return start + contentHeight - viewportHeight;
+}
+
+export function shouldShowBackToTop(scrollY: number, readingStart: number, threshold = 240) {
+  return scrollY - readingStart > threshold;
 }
 
 export function findActiveReadingHeading(positions: HeadingPosition[], scrollY: number, offset = 160) {
