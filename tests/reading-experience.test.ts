@@ -7,8 +7,10 @@ import {
   createPostLayoutActionScheduler,
   createReadingFrameScheduler,
   findActiveReadingHeading,
+  focusAndScrollReadingHeading,
   readingScrollBehavior,
   scheduleReadingHeadingNavigation,
+  shouldShowBackToTop,
   slugifyReadingHeading,
   uniqueReadingHeadingId,
 } from "../lib/reading-experience";
@@ -140,6 +142,22 @@ test("章节跳转遵守 reduced-motion 偏好", () => {
   assert.equal(readingScrollBehavior(false), "smooth");
 });
 
+test("章节跳转先转移键盘焦点再滚动", () => {
+  const events: string[] = [];
+  focusAndScrollReadingHeading({
+    focus(options) { events.push(`focus:${options?.preventScroll}`); },
+    scrollIntoView(options) { events.push(`scroll:${options?.behavior}:${options?.block}`); },
+  }, "smooth");
+  assert.deepEqual(events, ["focus:true", "scroll:smooth:start"]);
+});
+
+test("返回顶部按钮由实际滚动距离控制而不是短正文完成度", () => {
+  assert.equal(shouldShowBackToTop(0, 100), false);
+  assert.equal(shouldShowBackToTop(100, 100), false);
+  assert.equal(shouldShowBackToTop(340, 100), false);
+  assert.equal(shouldShowBackToTop(341, 100), true);
+});
+
 test("切换文章会以新文章标识重新初始化目录测量", () => {
   const component = readFileSync(new URL("../app/reading-experience.tsx", import.meta.url), "utf8");
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
@@ -154,4 +172,14 @@ test("移动端保留阅读目录而只隐藏其他辅助侧栏", () => {
   const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /\.reading-layout aside:not\(\.reading-toc\)\{display:none\}/);
   assert.doesNotMatch(styles, /\.reading-layout aside\{display:none\}/);
+  assert.match(styles, /\.reading-toc\{[^}]*max-height:calc\(100vh - 124px\)[^}]*overflow-y:auto/);
+  assert.match(styles, /\.reading-toc\{position:static;max-height:none;[^}]*overflow:hidden\}/);
+});
+
+test("阅读进度和重排观察都使用正文边界", () => {
+  const component = readFileSync(new URL("../app/reading-experience.tsx", import.meta.url), "utf8");
+  assert.match(component, /querySelector<HTMLElement>\("\.prose"\)/);
+  assert.match(component, /proseElement\.getBoundingClientRect\(\)/);
+  assert.match(component, /calculateReadingEnd\(start, proseElement\.scrollHeight/);
+  assert.match(component, /resizeObserver\?\.observe\(proseElement\)/);
 });

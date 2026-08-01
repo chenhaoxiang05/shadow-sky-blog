@@ -7,8 +7,10 @@ import {
   createPostLayoutActionScheduler,
   createReadingFrameScheduler,
   findActiveReadingHeading,
+  focusAndScrollReadingHeading,
   readingScrollBehavior,
   scheduleReadingHeadingNavigation,
+  shouldShowBackToTop,
   slugifyReadingHeading,
   uniqueReadingHeadingId,
   type HeadingPosition,
@@ -39,16 +41,20 @@ export function ReadingExperience({ articleRef, active, articleKey }: Props) {
     const article = articleRef.current;
     if (!article) return;
     const articleElement: HTMLElement = article;
+    const contentElement = articleElement.querySelector<HTMLElement>(".prose");
+    if (!contentElement) return;
+    const proseElement: HTMLElement = contentElement;
 
     function collectHeadings() {
       const used = new Set<string>();
-      const elements = Array.from(articleElement.querySelectorAll<HTMLHeadingElement>(".prose h2, .prose h3"));
+      const elements = Array.from(proseElement.querySelectorAll<HTMLHeadingElement>("h2, h3"));
       const outline = elements.flatMap<ReadingHeading>((heading, index) => {
         const label = heading.textContent?.trim();
         if (!label) return [];
         const preferred = heading.id || slugifyReadingHeading(label, index);
         const id = uniqueReadingHeadingId(preferred, used);
         heading.id = id;
+        heading.tabIndex = -1;
         return [{ id, label, level: heading.tagName === "H3" ? 3 : 2 }];
       });
       positionsRef.current = elements
@@ -59,13 +65,13 @@ export function ReadingExperience({ articleRef, active, articleKey }: Props) {
     }
 
     function updateReadingState() {
-      const rect = articleElement.getBoundingClientRect();
+      const rect = proseElement.getBoundingClientRect();
       const start = window.scrollY + rect.top;
-      const end = calculateReadingEnd(start, articleElement.scrollHeight, window.innerHeight);
+      const end = calculateReadingEnd(start, proseElement.scrollHeight, window.innerHeight);
       const nextProgress = calculateReadingProgress(window.scrollY, start, end);
       const nextActiveId = findActiveReadingHeading(positionsRef.current, window.scrollY);
       setProgress(nextProgress);
-      setShowBackToTop(nextProgress > 12);
+      setShowBackToTop(shouldShowBackToTop(window.scrollY, start));
       if (nextProgress <= 1) {
         activeIdRef.current = "";
         setActiveId("");
@@ -90,7 +96,7 @@ export function ReadingExperience({ articleRef, active, articleKey }: Props) {
     const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleLayoutUpdate);
 
     scheduler.schedule(true);
-    resizeObserver?.observe(articleElement);
+    resizeObserver?.observe(proseElement);
     window.addEventListener("scroll", scheduleScrollUpdate, { passive: true });
     window.addEventListener("resize", scheduleLayoutUpdate);
     window.addEventListener("orientationchange", scheduleLayoutUpdate);
@@ -119,7 +125,7 @@ export function ReadingExperience({ articleRef, active, articleKey }: Props) {
       () => {
         const heading = articleRef.current?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
         if (!heading) return;
-        heading.scrollIntoView({ behavior: readingScrollBehavior(prefersReducedMotion()), block: "start" });
+        focusAndScrollReadingHeading(heading, readingScrollBehavior(prefersReducedMotion()));
       },
     );
   }
