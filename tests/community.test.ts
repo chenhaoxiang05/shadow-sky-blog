@@ -3,7 +3,8 @@ import test from "node:test";
 import { CommunityService } from "../lib/community-service";
 import { DomainError, type PostRecord, type UserRecord } from "../lib/domain";
 import { MediaService } from "../lib/media-service";
-import { PostgresSearchProvider, SearchService } from "../lib/search";
+import { PostService } from "../lib/post-service";
+import { PostgresSearchProvider, SearchService, toSearchResponse } from "../lib/search";
 import type { StorageProvider } from "../lib/storage";
 import { MemoryRepository, actor, draft } from "./helpers/memory-repository";
 
@@ -19,6 +20,24 @@ test("评论频率限制拒绝一分钟内第六条评论", async () => { const 
 test("点赞添加与取消幂等并维持唯一计数", async () => { const { post, service } = setup(); assert.equal((await service.setLike(actor("member", "MEMBER"), post.id, true, "l1")).likeCount, 1); assert.equal((await service.setLike(actor("member", "MEMBER"), post.id, true, "l2")).likeCount, 1); const removed = await service.setLike(actor("member", "MEMBER"), post.id, false, "l3"); assert.equal(removed.active, false); assert.equal(removed.likeCount, 0); });
 test("收藏幂等且不能绕过文章可见性", async () => { const { repo, post, service } = setup(); await service.setBookmark(actor("member", "MEMBER"), post.id, true, "b1"); await service.setBookmark(actor("member", "MEMBER"), post.id, true, "b2"); assert.equal((await service.bookmarks(actor("member", "MEMBER"))).length, 1); post.visibility = "PRIVATE"; repo.posts.set(post.id, post); assert.equal((await service.bookmarks(actor("member", "MEMBER"))).length, 0); await rejectsCode(service.setBookmark(actor("member", "MEMBER"), post.id, true, "b3"), "NOT_FOUND"); });
 test("PostgreSQL SearchProvider 结果在服务端经过可见性过滤", async () => { const { repo } = setup(); repo.posts.clear(); repo.addPost(published("author", { title: "Azure Public" })); repo.addPost(published("author", { title: "Azure Members", visibility: "MEMBERS_ONLY" })); repo.addPost(published("author", { title: "Azure Private", visibility: "PRIVATE" })); const search = new SearchService(new PostgresSearchProvider(repo)); const request = { q: "Azure", page: 1, pageSize: 20 }; assert.deepEqual((await search.search(actor("visitor", "VISITOR"), request)).posts.map((post) => post.title), ["Azure Public"]); assert.equal((await search.search(actor("member", "MEMBER"), request)).posts.length, 2); assert.equal((await search.search(actor("author", "AUTHOR"), request)).posts.length, 3); });
+
+test("搜索 API 投影不包含正文且正文详情仍执行可见性检查", async () => {
+  const { repo } = setup();
+  repo.posts.clear();
+  const publicPost = published("author", { id: "projection-public", title: "Projection public", content: "x".repeat(50_000), contentHtml: "<p>公开正文</p>" });
+  const privatePost = published("author", { id: "projection-private", title: "Projection private", visibility: "PRIVATE", content: "私密原文", contentHtml: "<p>私密正文</p>" });
+  repo.addPost(publicPost);
+  repo.addPost(privatePost);
+  const search = new SearchService(new PostgresSearchProvider(repo));
+  const response = toSearchResponse(await search.search(actor("visitor", "VISITOR"), { q: "Projection", page: 1, pageSize: 8 }));
+  assert.deepEqual(response.posts.map((post) => post.id), ["projection-public"]);
+  assert.equal("content" in response.posts[0], false);
+  assert.equal("contentHtml" in response.posts[0], false);
+  assert.equal("visibility" in response.posts[0], false);
+  const posts = new PostService(repo);
+  await rejectsCode(posts.read(actor("visitor", "VISITOR"), privatePost.id), "NOT_FOUND");
+  assert.equal((await posts.read(actor("author", "AUTHOR"), privatePost.id)).contentHtml, "<p>私密正文</p>");
+});
 
 class TestStorage implements StorageProvider { files = new Map<string, Uint8Array>(); async put(data: Uint8Array, extension: string) { const key = `${crypto.randomUUID()}.${extension}`; this.files.set(key, data); return key; } async get(key: string) { const data = this.files.get(key); if (!data) throw new Error("missing"); return data; } async delete(key: string) { this.files.delete(key); } }
 test("媒体上传验证真实 MIME 并拒绝 SVG、伪装类型和超限文件", async () => { const { repo } = setup(); const storage = new TestStorage(); const media = new MediaService(repo, storage); const png = new Uint8Array([137,80,78,71,13,10,26,10,0]); const uploaded = await media.upload(actor("member", "MEMBER"), { data: png, declaredMime: "image/png", purpose: "AVATAR", requestId: "m1" }); assert.equal(uploaded.mimeType, "image/png"); assert.match(uploaded.url, /^\/api\/media\//); await rejectsCode(media.upload(actor("member", "MEMBER"), { data: png, declaredMime: "image/jpeg", purpose: "AVATAR", requestId: "m2" }), "INVALID_INPUT"); await rejectsCode(media.upload(actor("member", "MEMBER"), { data: new TextEncoder().encode("<svg><script/></svg>"), declaredMime: "image/svg+xml", purpose: "AVATAR", requestId: "m3" }), "INVALID_INPUT"); const oversized = new Uint8Array(5_000_001); oversized.set(png); await rejectsCode(media.upload(actor("member", "MEMBER"), { data: oversized, declaredMime: "image/png", purpose: "AVATAR", requestId: "m4" }), "INVALID_INPUT"); });

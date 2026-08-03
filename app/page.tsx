@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { CommandPalette } from "./command-palette";
+import { ReadingExperience } from "./reading-experience";
 import { useEditorAutosave } from "./use-editor-autosave";
 import { useRadialThemeTransition } from "./use-radial-theme-transition";
 import {
@@ -15,14 +17,28 @@ import {
   type EditorAsyncTarget,
   type EditorDraftFields,
 } from "@/lib/editor-autosave";
+import {
+  createArticleLoadCoordinator,
+  readArticleDiscussion,
+  readPostContent,
+  selectCatalogArticle,
+  selectSearchArticle,
+  submitArticleComment,
+  toggleArticleInteraction,
+  updateArticleCommentDraft,
+  type ArticleDiscussions,
+  type ArticleInteractions,
+  type ArticleSelection,
+  type PaletteDestination,
+} from "@/lib/command-palette";
 
 type View = "home" | "articles" | "article" | "profile" | "bookmarks" | "studio" | "editor" | "admin" | "users" | "adminInvite" | "audit" | "login" | "invite" | "changePassword" | "forbidden";
 
 const articles = [
-  { title: "把一个 AI Agent 从 Demo 带到生产环境", excerpt: "从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。", author: "Lin Chen", initials: "LC", category: "AI Engineering", read: "8 min", date: "7 月 9 日", accent: "violet", featured: true, tags: ["Agent", "Production"] },
-  { title: "PostgreSQL 索引设计：一次真实的慢查询复盘", excerpt: "一个看似合理的复合索引，为什么让关键查询越来越慢？", author: "Mika", initials: "MK", category: "Backend", read: "11 min", date: "7 月 7 日", accent: "blue", featured: false, tags: ["PostgreSQL", "Performance"] },
-  { title: "用 Next.js 构建可迁移的内容平台", excerpt: "把运行时、存储和身份能力放在清晰的适配层后面。", author: "Sky Pan", initials: "SP", category: "Frontend", read: "6 min", date: "7 月 5 日", accent: "mint", featured: false, tags: ["Next.js", "Architecture"] },
-  { title: "我们如何组织每周技术共学", excerpt: "不追求信息量，追求可复用的知识沉淀与持续反馈。", author: "Alice Zhou", initials: "AZ", category: "Community", read: "5 min", date: "7 月 2 日", accent: "amber", featured: false, tags: ["Learning", "Team"] },
+  { title: "把一个 AI Agent 从 Demo 带到生产环境", excerpt: "从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。", author: "Lin Chen", initials: "LC", category: "AI Engineering", read: "8 min", readTime: "8 分钟阅读", date: "7 月 9 日", published: "2026 年 7 月 9 日", accent: "violet", featured: true, tags: ["Agent", "Production"], contentHtml: '<p class="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div class="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p>' },
+  { title: "PostgreSQL 索引设计：一次真实的慢查询复盘", excerpt: "一个看似合理的复合索引，为什么让关键查询越来越慢？", author: "Mika", initials: "MK", category: "Backend", read: "11 min", readTime: "11 分钟阅读", date: "7 月 7 日", published: "2026 年 7 月 7 日", accent: "blue", featured: false, tags: ["PostgreSQL", "Performance"], contentHtml: '<p class="lead">一次逐渐变慢的核心查询，让我们重新审视复合索引的列顺序、选择性和真实访问模式。</p><h2>从执行计划开始</h2><p>我们先对比高峰与低峰时段的 EXPLAIN ANALYZE，确认代价来自扫描范围扩大，而不是连接池或网络抖动。</p><h2>索引为何失效</h2><p>原索引把低选择性状态列放在首位，随着历史数据增长，数据库需要读取越来越多的索引页。</p><h2>验证与回滚</h2><p>新索引使用线上采样数据回放验证，并通过并发创建和明确回滚窗口降低变更风险。</p>' },
+  { title: "用 Next.js 构建可迁移的内容平台", excerpt: "把运行时、存储和身份能力放在清晰的适配层后面。", author: "Sky Pan", initials: "SP", category: "Frontend", read: "6 min", readTime: "6 分钟阅读", date: "7 月 5 日", published: "2026 年 7 月 5 日", accent: "mint", featured: false, tags: ["Next.js", "Architecture"], contentHtml: '<p class="lead">可迁移性不是放弃平台能力，而是让业务规则不依赖某一个部署环境。</p><h2>先划清边界</h2><p>身份、数据库、对象存储和搜索都通过稳定接口进入领域服务，页面只负责组合交互。</p><h2>保持服务端授权</h2><p>文章可见性和角色权限在服务端执行，迁移前后使用同一组策略测试验证。</p><h2>为 Azure 留出路径</h2><p>容器构建、环境变量和迁移命令保持显式，使预览环境验证过的代码可以平稳进入 Azure。</p>' },
+  { title: "我们如何组织每周技术共学", excerpt: "不追求信息量，追求可复用的知识沉淀与持续反馈。", author: "Alice Zhou", initials: "AZ", category: "Community", read: "5 min", readTime: "5 分钟阅读", date: "7 月 2 日", published: "2026 年 7 月 2 日", accent: "amber", featured: false, tags: ["Learning", "Team"], contentHtml: '<p class="lead">每周共学的目标不是塞满议程，而是把讨论转化为下一次还能使用的共同知识。</p><h2>一个小而稳定的节奏</h2><p>每位成员只带来一个问题、一段实践或一个失败案例，现场优先追问判断依据。</p><h2>会后形成可检索记录</h2><p>分享者整理结论、证据和未决问题，其他成员补充链接并完成轻量复核。</p><h2>用反馈改善下一轮</h2><p>我们记录哪些内容真正被项目复用，以此调整选题，而不是追求单次活动的信息量。</p>' },
 ];
 
 const categories = [
@@ -32,6 +48,16 @@ const categories = [
 const authors = [
   ["Sky Pan", "SP", "18 篇文章", "Azure · Next.js"], ["Lin Chen", "LC", "14 篇文章", "AI Engineering"], ["Mika", "MK", "11 篇文章", "Backend · Data"], ["Alice Zhou", "AZ", "9 篇文章", "Design · Community"],
 ];
+
+const paletteCategories = categories.map(([name]) => name);
+const paletteTags = Array.from(new Set(articles.flatMap((article) => article.tags)));
+const initialArticleSelection = selectCatalogArticle(articles[0]);
+const initialArticleDiscussions: ArticleDiscussions = {
+  [initialArticleSelection.id]: {
+    draft: "",
+    comments: [{ id: "featured-mika", author: "Mika", initials: "MK", body: "权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。" }],
+  },
+};
 
 const delegatedRoles = ["MEMBER", "CONTRIBUTOR", "AUTHOR", "EDITOR"] as const;
 const initialEditorForm: EditorDraftFields = { title: "", summary: "", content: "# 开始写作\n\n把这次实践中最值得复用的判断记录下来。", visibility: "PUBLIC", tags: "Next.js, Architecture", coverImage: "" };
@@ -57,11 +83,15 @@ function ArticleCard({ article, onOpen }: { article: (typeof articles)[number]; 
 export default function Home() {
   const [view, setView] = useState<View>("home");
   const themeButtonRef = useRef<HTMLButtonElement>(null);
+  const readingArticleRef = useRef<HTMLElement>(null);
   const { theme, toggleTheme, toggleLabel } = useRadialThemeTransition(themeButtonRef);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("全部");
   const [toast, setToast] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [selectedArticle, setSelectedArticle] = useState<ArticleSelection>(initialArticleSelection);
+  const articleLoadCoordinatorRef = useRef(createArticleLoadCoordinator());
   const [busy, setBusy] = useState(false);
   const [loginForm, setLoginForm] = useState({ login: "", password: "" });
   const [inviteForm, setInviteForm] = useState({ token: "", handle: "", displayName: "", password: "", confirmPassword: "" });
@@ -70,9 +100,8 @@ export default function Home() {
   const [generatedInviteLink, setGeneratedInviteLink] = useState("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [operatorRole, setOperatorRole] = useState<"OWNER" | "ADMIN">("ADMIN");
-  const [liked, setLiked] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
-  const [commentBody, setCommentBody] = useState("");
+  const [articleInteractions, setArticleInteractions] = useState<ArticleInteractions>({});
+  const [articleDiscussions, setArticleDiscussions] = useState<ArticleDiscussions>(initialArticleDiscussions);
   const [editorForm, setEditorForm] = useState<EditorDraftFields>(initialEditorForm);
   const editorFormRef = useRef<EditorDraftFields>(initialEditorForm);
   const editorAsyncTargetRef = useRef<EditorAsyncTarget>({ userId: null, draftId: "new", generation: 0 });
@@ -109,6 +138,7 @@ export default function Home() {
     const token = new URLSearchParams(window.location.search).get("token");
     if (!token) return;
     const timer = window.setTimeout(() => {
+      articleLoadCoordinatorRef.current.invalidate();
       setInviteForm((current) => ({ ...current, token }));
       setView("invite");
     }, 0);
@@ -145,8 +175,12 @@ export default function Home() {
     return () => { active = false; controller.abort(); if (sessionBootstrapAbortRef.current === controller) sessionBootstrapAbortRef.current = null; };
   }, []);
 
+  useEffect(() => () => articleLoadCoordinatorRef.current.invalidate(), []);
+
   function navigate(next: View) {
     if (view === "editor" && next !== "editor") { localDraft.deactivate(); editorOperationRef.current += 1; editorAsyncTargetRef.current = { ...editorAsyncTargetRef.current, generation: editorAsyncTargetRef.current.generation + 1 }; setBusy(false); }
+    articleLoadCoordinatorRef.current.invalidate();
+    if (next !== "article" && window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
     setView(next); setMobileOpen(false); window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -223,6 +257,79 @@ export default function Home() {
       notify("登录状态已失效，请重新登录");
       sessionExpiryNotifiedRef.current = true;
     }
+  }
+
+  function openCatalogArticle(article: (typeof articles)[number]) {
+    const nextArticle = selectCatalogArticle(article);
+    if (nextArticle.id !== selectedArticle.id && window.location.hash) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+    setSelectedArticle(nextArticle);
+    navigate("article");
+  }
+
+  async function selectCommand(destination: PaletteDestination) {
+    if (destination.kind === "page") {
+      navigate(destination.view);
+      return;
+    }
+    if (destination.kind === "category") {
+      setFilter(destination.value);
+      setQuery("");
+      navigate("articles");
+      return;
+    }
+    if (destination.kind === "tag") {
+      setFilter("全部");
+      setQuery(destination.value);
+      navigate("articles");
+      return;
+    }
+    const request = articleLoadCoordinatorRef.current.begin();
+    try {
+      const payload = await api(`/api/posts/${encodeURIComponent(destination.post.id)}`, { signal: request.signal });
+      if (!articleLoadCoordinatorRef.current.isCurrent(request)) return;
+      const contentHtml = readPostContent(payload);
+      if (contentHtml === null) throw new Error("文章正文暂时不可用");
+      const nextArticle = selectSearchArticle(destination.post, contentHtml);
+      if (nextArticle.id !== selectedArticle.id && window.location.hash) {
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
+      setSelectedArticle(nextArticle);
+      navigate("article");
+    } catch (error) {
+      if (request.signal.aborted || !articleLoadCoordinatorRef.current.isCurrent(request)) return;
+      notify(error instanceof Error ? error.message : "文章暂时无法打开");
+    } finally {
+      articleLoadCoordinatorRef.current.finish(request);
+    }
+  }
+
+  const selectedInteraction = articleInteractions[selectedArticle.id] ?? { liked: false, bookmarked: false };
+  const selectedDiscussion = readArticleDiscussion(articleDiscussions, selectedArticle.id);
+
+  function toggleSelectedInteraction(field: "liked" | "bookmarked") {
+    const next = !selectedInteraction[field];
+    setArticleInteractions((current) => toggleArticleInteraction(current, selectedArticle.id, field));
+    if (field === "liked") notify(next ? "已点赞" : "已取消点赞");
+    else notify(next ? "已加入我的收藏" : "已取消收藏");
+  }
+
+  function updateSelectedCommentDraft(body: string) {
+    setArticleDiscussions((current) => updateArticleCommentDraft(current, selectedArticle.id, body));
+  }
+
+  function submitSelectedComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const body = selectedDiscussion.draft.trim();
+    if (!body) return;
+    setArticleDiscussions((current) => submitArticleComment(current, selectedArticle.id, {
+      id: crypto.randomUUID(),
+      author: "当前成员",
+      initials: "ME",
+      body,
+    }));
+    notify("评论已提交");
   }
 
   function csrfToken() { return document.cookie.split(";").map((part) => part.trim().split("=")).find(([key]) => key === "shadow_sky_csrf")?.slice(1).join("=") ?? ""; }
@@ -335,12 +442,27 @@ export default function Home() {
               <span className="theme-icon theme-icon-moon" />
             </span>
           </button>
-          <button className="search-shortcut" onClick={() => navigate("articles")}>⌕ <span>搜索</span><kbd>⌘ K</kbd></button>
+          <button
+            type="button"
+            className="search-shortcut"
+            onClick={() => setCommandPaletteOpen(true)}
+            aria-label="打开全局搜索"
+            aria-haspopup="dialog"
+            aria-expanded={commandPaletteOpen}
+          ><span className="search-icon" aria-hidden="true" /><span>搜索</span><kbd>⌘ K</kbd></button>
           <button className="btn-secondary" onClick={() => navigate("login")}>登录</button>
           <button className="btn-primary" onClick={() => navigate("studio")}>写文章 <span>↗</span></button>
           <button className="menu-btn" onClick={() => setMobileOpen(!mobileOpen)} aria-label="打开菜单">☰</button>
         </div>
       </header>
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onSelect={selectCommand}
+        categories={paletteCategories}
+        tags={paletteTags}
+      />
 
       <main>
         {view === "home" && <>
@@ -355,14 +477,14 @@ export default function Home() {
           <section className="section featured-section">
             <div className="section-head"><div><span className="kicker">FEATURED</span><h2>本周推荐</h2></div><button className="text-link" onClick={() => navigate("articles")}>查看全部文章 →</button></div>
             <div className="featured-grid">
-              <button className="featured-art" onClick={() => navigate("article")}><div className="code-window"><span /><span /><span /><pre>agent.run({`{\n  `}<b>trustBoundary</b>: true,{`\n  evaluate: continuous\n}`})</pre></div><div className="orb orb-one" /><div className="orb orb-two" /></button>
-              <div className="featured-copy"><span className="pill">AI Engineering</span><h2>把一个 AI Agent<br />从 Demo 带到生产环境</h2><p>从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。</p><div className="feature-author"><Avatar initials="LC" /><div><b>Lin Chen</b><span>7 月 9 日 · 8 分钟阅读</span></div></div><button className="round-arrow" onClick={() => navigate("article")} aria-label="阅读文章">↗</button></div>
+              <button className="featured-art" onClick={() => openCatalogArticle(articles[0])}><div className="code-window"><span /><span /><span /><pre>agent.run({`{\n  `}<b>trustBoundary</b>: true,{`\n  evaluate: continuous\n}`})</pre></div><div className="orb orb-one" /><div className="orb orb-two" /></button>
+              <div className="featured-copy"><span className="pill">AI Engineering</span><h2>把一个 AI Agent<br />从 Demo 带到生产环境</h2><p>从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。</p><div className="feature-author"><Avatar initials="LC" /><div><b>Lin Chen</b><span>7 月 9 日 · 8 分钟阅读</span></div></div><button className="round-arrow" onClick={() => openCatalogArticle(articles[0])} aria-label="阅读文章">↗</button></div>
             </div>
           </section>
 
           <section className="section">
             <div className="section-head"><div><span className="kicker">LATEST</span><h2>最新发布</h2></div><div className="segmented"><button className="selected">全部</button><button>技术</button><button>学习</button><button>项目</button></div></div>
-            <div className="cards-grid">{articles.slice(1).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div>
+            <div className="cards-grid">{articles.slice(1).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div>
           </section>
 
           <section className="section category-section">
@@ -380,22 +502,22 @@ export default function Home() {
           <div className="page-heading"><span className="kicker">LIBRARY</span><h1>文章</h1><p>来自社区成员的技术实践、学习记录与项目复盘。</p></div>
           <div className="library-toolbar"><label className="search-box">⌕<input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索文章、标签或作者…" /></label><select value={filter} onChange={(e) => setFilter(e.target.value)}><option>全部</option>{categories.map(([c]) => <option key={c}>{c}</option>)}</select></div>
           <div className="filter-chips">{["全部", "AI Engineering", "Frontend", "Backend", "Community"].map((item) => <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}</button>)}</div>
-          <div className="cards-grid library-grid">{filtered.map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div>
+          <div className="cards-grid library-grid">{filtered.map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div>
           {!filtered.length && <div className="empty-state"><span>⌕</span><h3>没有找到相关内容</h3><p>试试更短的关键词或其他分类。</p></div>}
         </section>}
 
-        {view === "article" && <article className="reading-page page-enter">
+        {view === "article" && <article ref={readingArticleRef} className="reading-page page-enter">
           <button className="back-link" onClick={() => navigate("articles")}>← 返回文章</button>
-          <div className="article-hero"><span className="pill">AI Engineering</span><h1>把一个 AI Agent<br />从 Demo 带到生产环境</h1><p>从评估、可观测性到权限边界，我们整理了这次落地中最重要的工程判断。</p><div className="article-byline"><Avatar initials="LC" /><div><b>Lin Chen</b><span>2026 年 7 月 9 日 · 8 分钟阅读</span></div><button onClick={() => { setLiked(!liked); notify(liked ? "已取消点赞" : "已点赞"); }}>{liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => { setBookmarked(!bookmarked); notify(bookmarked ? "已取消收藏" : "已加入我的收藏"); }}>{bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
-          <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>production_ready = evaluation + observability + boundaries</pre></div></div>
-          <div className="reading-layout"><aside><b>本文目录</b><a href="#context">01 背景</a><a href="#evaluation">02 持续评估</a><a href="#boundary">03 权限边界</a><a href="#summary">04 总结</a></aside><div className="prose"><p className="lead">真正困难的部分从来不是让 Agent 跑起来，而是让它在不确定的输入、变化的依赖和真实权限边界中保持可靠。</p><h2 id="context">从 Demo 到系统</h2><p>Demo 验证的是能力上限；生产系统需要定义可接受的失败方式。我们把每个工具调用都视为一个需要审计的动作，把模型输出当作非可信输入。</p><blockquote>可靠性不是一个开关，而是一组可以被观察、被验证、被回滚的约束。</blockquote><h2 id="evaluation">建立持续评估</h2><p>离线样本只能建立初始信心。上线后还需要匿名化的真实流量回放、关键路径指标和人工复核队列。</p><div className="inline-code">evaluate → observe → review → improve</div><h2 id="boundary">把权限放在服务端</h2><p>前端隐藏按钮不等于权限控制。每一次读取、发布、审核和管理操作都必须经过服务端策略判断，并留下结构化审计记录。</p><h2 id="summary">结语</h2><p>一个成熟的 Agent 系统，最终看起来更像一套严谨的软件工程系统，而不是一段漂亮的 Prompt。</p></div></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) { notify("评论已提交"); setCommentBody(""); } }}><textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form><div className="comment-item"><Avatar initials="MK" small /><div><b>Mika</b><p>权限边界这部分很实用，尤其是把可见性检查放在收藏和搜索之后再次执行。</p><button>回复</button></div></div></section>
+          <div className="article-hero"><span className="pill">{selectedArticle.tags[0] ?? "文章"}</span><h1>{selectedArticle.title}</h1><p>{selectedArticle.summary}</p><div className="article-byline"><Avatar initials={selectedArticle.authorInitials} /><div><b>{selectedArticle.authorDisplayName}</b><span>{selectedArticle.publishedLabel} · {selectedArticle.readTimeLabel}</span></div><button onClick={() => toggleSelectedInteraction("liked")}>{selectedInteraction.liked ? "♥ 已赞" : "♡ 点赞"}</button><button onClick={() => toggleSelectedInteraction("bookmarked")}>{selectedInteraction.bookmarked ? "★ 已收藏" : "☆ 收藏"}</button></div></div>
+          <div className="reading-cover"><div className="code-window large"><span /><span /><span /><pre>{selectedArticle.tags.slice(0, 3).join(" + ") || "Shadow Sky Community"}</pre></div></div>
+          <div className="reading-layout"><ReadingExperience key={selectedArticle.id} articleRef={readingArticleRef} active={view === "article"} articleKey={selectedArticle.id} /><div className="prose" dangerouslySetInnerHTML={{ __html: selectedArticle.contentHtml }} /></div><section className="comments-panel"><h2>成员讨论</h2><p>评论继承文章可见性，并在服务端进行 XSS 清理和频率限制。</p><form onSubmit={submitSelectedComment}><textarea value={selectedDiscussion.draft} onChange={(event) => updateSelectedCommentDraft(event.target.value)} maxLength={4000} placeholder="分享你的想法，或回复其他成员…" /><button className="btn-primary">发表评论</button></form>{selectedDiscussion.comments.length ? selectedDiscussion.comments.map((comment) => <div className="comment-item" key={comment.id}><Avatar initials={comment.initials} small /><div><b>{comment.author}</b><p>{comment.body}</p><button>回复</button></div></div>) : <div className="empty-mini">这篇文章还没有讨论，来写下第一条评论吧。</div>}</section>
         </article>}
 
         {view === "editor" && <div className="editor-media-tools"><span><b>媒体</b><small>{mediaUploadBusy ? "图片正在上传；完成前不能开始第二个上传。" : mediaUploadEnabled ? "仅 PNG、JPEG、WebP、GIF；服务端校验真实 MIME。" : "预览环境尚未接入持久对象存储，媒体上传暂不可用。"}</small></span>{mediaUploadEnabled && editorCanEdit && <><label className="btn-secondary upload-button" aria-disabled={mediaUploadBusy || busy}>上传封面<input type="file" disabled={mediaUploadBusy || busy} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "COVER")} /></label><label className="btn-secondary upload-button" aria-disabled={mediaUploadBusy || busy}>插入正文图片<input type="file" disabled={mediaUploadBusy || busy} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "CONTENT")} /></label></>}</div>}
 
-        {view === "profile" && <section className="page section page-enter"><div className="profile-hero"><Avatar initials="SP" /><div><h1>Sky Pan</h1><p>@sky_pan · 关注云原生、Next.js 与高质量技术社区。正在把群聊里的灵感变成长期知识。</p><p><a href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://shadowskypan.asia" target="_blank" rel="noreferrer">个人网站</a></p><div className="profile-stats"><span><b>18</b>公开文章</span><span><b>1.2k</b>获赞</span></div></div>{mediaUploadEnabled && <label className="btn-secondary upload-button" aria-disabled={mediaUploadBusy || busy}>更新头像<input type="file" disabled={mediaUploadBusy || busy} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "AVATAR")} /></label>}</div><div className="profile-tabs"><button className="selected">文章</button><button onClick={() => navigate("bookmarks")}>我的收藏</button><button>关于</button></div><div className="cards-grid">{articles.slice(0, 3).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div></section>}
+        {view === "profile" && <section className="page section page-enter"><div className="profile-hero"><Avatar initials="SP" /><div><h1>Sky Pan</h1><p>@sky_pan · 关注云原生、Next.js 与高质量技术社区。正在把群聊里的灵感变成长期知识。</p><p><a href="https://github.com/" target="_blank" rel="noreferrer">GitHub</a> · <a href="https://shadowskypan.asia" target="_blank" rel="noreferrer">个人网站</a></p><div className="profile-stats"><span><b>18</b>公开文章</span><span><b>1.2k</b>获赞</span></div></div>{mediaUploadEnabled && <label className="btn-secondary upload-button" aria-disabled={mediaUploadBusy || busy}>更新头像<input type="file" disabled={mediaUploadBusy || busy} accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => event.target.files?.[0] && uploadImage(event.target.files[0], "AVATAR")} /></label>}</div><div className="profile-tabs"><button className="selected">文章</button><button onClick={() => navigate("bookmarks")}>我的收藏</button><button>关于</button></div><div className="cards-grid">{articles.slice(0, 3).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div></section>}
 
-        {view === "bookmarks" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">PRIVATE LIBRARY</span><h1>我的收藏</h1><p>收藏列表会重新执行文章可见性检查，不能用于读取已失去权限的内容。</p></div><button className="btn-secondary" onClick={() => navigate("profile")}>返回个人主页</button></div><div className="cards-grid">{articles.slice(0, 2).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => navigate("article")} />)}</div></section>}
+        {view === "bookmarks" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">PRIVATE LIBRARY</span><h1>我的收藏</h1><p>收藏列表会重新执行文章可见性检查，不能用于读取已失去权限的内容。</p></div><button className="btn-secondary" onClick={() => navigate("profile")}>返回个人主页</button></div><div className="cards-grid">{articles.slice(0, 2).map((article) => <ArticleCard key={article.title} article={article} onOpen={() => openCatalogArticle(article)} />)}</div></section>}
 
         {view === "studio" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">CREATOR STUDIO</span><h1>我的文章</h1><p>管理草稿、提交审核并追踪发布状态。发布路径由账户的 publishingPolicy 决定。</p></div><button className="btn-primary" onClick={() => openEditor("new")}>＋ 新建文章</button></div><div className="policy-banner"><span>当前发布策略</span><b>REVIEW_REQUIRED</b><p>新文章需要 Editor、Admin 或 Owner 审核。策略由管理员按用户单独设置。</p></div><div className="stat-grid"><div><span>草稿</span><b>3</b><small>其中 1 篇本周更新</small></div><div><span>待审核</span><b>2</b><small>平均 1.4 天完成</small></div><div><span>已发布</span><b>18</b><small>累计 8,492 次阅读</small></div><div><span>被退回</span><b>1</b><small>等待修改后重新提交</small></div></div><div className="table-card"><div className="table-row table-head"><span>文章</span><span>状态</span><span>可见性</span><span>更新时间</span><span /></div>{[["Azure 上的容器化 Next.js 实践","草稿","PRIVATE","今天"],["用 Next.js 构建可迁移的内容平台","已发布","PUBLIC","7 月 5 日"],["群聊知识库的内容治理","待审核","MEMBERS_ONLY","7 月 3 日"],["一次失败的缓存优化复盘","被退回","MEMBERS_ONLY","6 月 28 日"]].map((row) => <div className="table-row" key={row[0]}><span><b>{row[0]}</b><small>技术文章</small></span><span><i className={`status status-${row[1]}`}>{row[1]}</i></span><span>{row[2]}</span><span>{row[3]}</span><button onClick={() => openEditor(row[0])}>编辑</button></div>)}</div></section>}
 
