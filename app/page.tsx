@@ -9,13 +9,18 @@ import {
   advanceEditorIdentityState,
   applyEditorMediaResult,
   createSingleFlightLock,
+  EDITOR_SESSION_EXPIRED_SAVED_MESSAGE,
+  EDITOR_SESSION_EXPIRED_UNSAVED_MESSAGE,
+  editorSessionExpiryMessage,
   editorAsyncCompletionIsCurrent,
   editorDraftCanEdit,
+  editorEmergencyDraftForScope,
   editorIdentityRequestIsCurrent,
   editorUnauthorizedInvalidatesIdentity,
   serverSaveContainsLatestFields,
   type EditorAsyncTarget,
   type EditorDraftFields,
+  type EditorEmergencyDraft,
 } from "@/lib/editor-autosave";
 import {
   createArticleLoadCoordinator,
@@ -109,8 +114,10 @@ export default function Home() {
   const editorIdentityRevisionRef = useRef(0);
   const sessionBootstrapAbortRef = useRef<AbortController | null>(null);
   const sessionExpiryNotifiedRef = useRef(false);
+  const editorEmergencyDraftRef = useRef<EditorEmergencyDraft | null>(null);
   const [editorDraftId, setEditorDraftId] = useState("new");
   const [editorDirty, setEditorDirty] = useState(false);
+  const editorDirtyRef = useRef(false);
   const [saveState, setSaveState] = useState("尚未保存");
   const [mediaUploadEnabled, setMediaUploadEnabled] = useState(false);
   const [mediaUploadBusy, setMediaUploadBusy] = useState(false);
@@ -130,9 +137,15 @@ export default function Home() {
       : !localDraft.ready ? "正在检查本地草稿…"
         : localDraft.status === "saving" ? "正在保存到本地…"
     : localDraft.status === "saved" ? "已保存到本地"
+      : localDraft.status === "conflict" ? "另一标签页已有更新，请选择保留版本"
       : localDraft.status === "error" ? "本地保存不可用，请手动保存"
         : localDraft.status === "recovery" ? "发现可恢复的本地草稿"
           : saveState;
+
+  function updateEditorDirty(dirty: boolean) {
+    editorDirtyRef.current = dirty;
+    setEditorDirty(dirty);
+  }
 
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token");
@@ -150,6 +163,12 @@ export default function Home() {
     fetch("/api/media").then((response) => response.ok ? response.json() : null).then((data) => { if (active) setMediaUploadEnabled(data?.uploadEnabled === true); }).catch(() => undefined);
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (localDraft.status !== "saved") return;
+    const emergency = editorEmergencyDraftForScope(editorEmergencyDraftRef.current, editorUserId, editorDraftId);
+    if (emergency && serverSaveContainsLatestFields(emergency, editorForm)) editorEmergencyDraftRef.current = null;
+  }, [editorDraftId, editorForm, editorUserId, localDraft.status]);
 
   useEffect(() => {
     let active = true;
@@ -185,7 +204,7 @@ export default function Home() {
   }
 
   function notify(message: string) {
-    if (message === "登录状态已失效，请重新登录" && sessionExpiryNotifiedRef.current) return;
+    if ((message === EDITOR_SESSION_EXPIRED_SAVED_MESSAGE || message === EDITOR_SESSION_EXPIRED_UNSAVED_MESSAGE) && sessionExpiryNotifiedRef.current) return;
     setToast(message); window.setTimeout(() => setToast(""), 2200);
   }
 
@@ -193,21 +212,26 @@ export default function Home() {
     editorOperationRef.current += 1;
     editorAsyncTargetRef.current = { userId: editorAsyncTargetRef.current.userId, draftId, generation: editorAsyncTargetRef.current.generation + 1 };
     setEditorDraftId(draftId);
-    editorFormRef.current = initialEditorForm;
-    setEditorForm(initialEditorForm);
-    setEditorDirty(false);
+    const emergency = editorEmergencyDraftForScope(editorEmergencyDraftRef.current, editorAsyncTargetRef.current.userId, draftId);
+    const nextForm = emergency ?? initialEditorForm;
+    editorFormRef.current = nextForm;
+    setEditorForm(nextForm);
+    updateEditorDirty(Boolean(emergency));
     setBusy(false);
-    setSaveState("尚未保存");
+    setSaveState(emergency ? "已恢复内存中的未保存内容" : "尚未保存");
     navigate("editor");
   }
 
   function updateEditorField<Key extends keyof EditorDraftFields>(key: Key, value: EditorDraftFields[Key]) {
-    setEditorForm((current) => {
-      const next = { ...current, [key]: value };
-      editorFormRef.current = next;
-      return next;
-    });
-    setEditorDirty(true);
+    const next = { ...editorFormRef.current, [key]: value };
+    editorFormRef.current = next;
+    const emergency = editorEmergencyDraftRef.current;
+    const target = editorAsyncTargetRef.current;
+    if (emergency && emergency.userId === target.userId && emergency.draftId === target.draftId) {
+      editorEmergencyDraftRef.current = { ...emergency, fields: next };
+    }
+    setEditorForm(next);
+    updateEditorDirty(true);
     setSaveState("有未保存的修改");
   }
 
@@ -216,7 +240,7 @@ export default function Home() {
     if (!restored) return;
     editorFormRef.current = restored;
     setEditorForm(restored);
-    setEditorDirty(true);
+    updateEditorDirty(true);
     setSaveState("已恢复本地草稿");
     notify("已恢复本地草稿");
   }
@@ -243,20 +267,29 @@ export default function Home() {
     sessionExpiryNotifiedRef.current = false;
     editorFormRef.current = initialEditorForm;
     setEditorForm(initialEditorForm);
-    setEditorDirty(false);
+    updateEditorDirty(false);
     setSaveState("尚未保存");
   }
 
   function handleEditorSessionExpired() {
-    localDraft.suspendForIdentityLoss();
+    const target = { ...editorAsyncTargetRef.current };
+    const latestFields = { ...editorFormRef.current };
+    const { persisted } = localDraft.suspendForIdentityLoss({ fields: latestFields, dirty: editorDirtyRef.current });
+    if (!persisted && target.userId) {
+      editorEmergencyDraftRef.current = { userId: target.userId, draftId: target.draftId, fields: latestFields };
+    } else if (editorEmergencyDraftForScope(editorEmergencyDraftRef.current, target.userId, target.draftId)) {
+      editorEmergencyDraftRef.current = null;
+    }
+    const message = editorSessionExpiryMessage(persisted);
     advanceEditorIdentity(null);
-    setSaveState("登录状态已失效");
+    setSaveState(persisted ? "登录状态已失效，内容已保存在本地" : "登录状态已失效，本地保存未完成");
     setOperatorRole("ADMIN");
     setBusy(false);
     if (!sessionExpiryNotifiedRef.current) {
-      notify("登录状态已失效，请重新登录");
+      notify(message);
       sessionExpiryNotifiedRef.current = true;
     }
+    return message;
   }
 
   function openCatalogArticle(article: (typeof articles)[number]) {
@@ -339,8 +372,7 @@ export default function Home() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401 && editorUnauthorizedInvalidatesIdentity(editorIdentityRevisionRef.current, requestIdentityRevision, options.invalidateIdentityOn401 !== false)) {
-        handleEditorSessionExpired();
-        throw new Error("登录状态已失效，请重新登录");
+        throw new Error(handleEditorSessionExpired());
       }
       throw new Error(data?.error?.message ?? "请求失败，请稍后重试");
     }
@@ -348,7 +380,7 @@ export default function Home() {
   }
   async function submitLogin(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/auth/login", { method: "POST", body: JSON.stringify(loginForm) }, { invalidateIdentityOn401: false }); const userId = typeof data.user.id === "string" ? data.user.id : null; if (!userId) throw new Error("登录响应无效"); applyAuthenticatedEditorIdentity(userId); if (data.user.role === "OWNER" || data.user.role === "ADMIN") setOperatorRole(data.user.role); if (data.user.mustChangePassword) { notify("请先修改管理员设置的临时密码"); navigate("changePassword"); } else { notify("登录成功"); navigate("studio"); } } catch (error) { notify(error instanceof Error ? error.message : "登录失败"); } finally { setBusy(false); } }
   async function submitInvite(event: FormEvent) { event.preventDefault(); setBusy(true); try { await api("/api/auth/invite", { method: "POST", body: JSON.stringify(inviteForm) }); notify("注册成功，请使用新账户登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "邀请无效"); } finally { setBusy(false); } }
-  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); localDraft.suspendForIdentityLoss(); advanceEditorIdentity(null); editorFormRef.current = initialEditorForm; setEditorForm(initialEditorForm); setEditorDirty(false); setSaveState("尚未保存"); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
+  async function submitPasswordChange(event: FormEvent) { event.preventDefault(); if (changePasswordForm.newPassword !== changePasswordForm.confirmPassword) { notify("两次新密码输入不一致"); return; } setBusy(true); try { await api("/api/auth/change-password", { method: "POST", body: JSON.stringify({ currentPassword: changePasswordForm.currentPassword, newPassword: changePasswordForm.newPassword }) }); localDraft.suspendForIdentityLoss({ fields: editorFormRef.current, dirty: editorDirtyRef.current }); advanceEditorIdentity(null); editorFormRef.current = initialEditorForm; setEditorForm(initialEditorForm); updateEditorDirty(false); setSaveState("尚未保存"); notify("密码已修改，请重新登录"); navigate("login"); } catch (error) { notify(error instanceof Error ? error.message : "修改失败"); } finally { setBusy(false); } }
   async function createAdminInvitation(event: FormEvent) { event.preventDefault(); setBusy(true); try { const data = await api("/api/admin/invitations", { method: "POST", body: JSON.stringify(adminInviteForm) }); setGeneratedInviteLink(data.inviteLink); notify("一次性邀请已生成"); } catch (error) { notify(error instanceof Error ? error.message : "创建邀请失败"); } finally { setBusy(false); } }
   async function resetUserPassword(userId: string) { setBusy(true); try { const data = await api("/api/admin/users/reset-password", { method: "POST", body: JSON.stringify({ userId }) }); setTemporaryPassword(data.temporaryPassword); notify("临时密码已生成，旧 Session 已撤销"); } catch (error) { notify(error instanceof Error ? error.message : "重置失败"); } finally { setBusy(false); } }
   async function uploadImage(file: File, purpose: "AVATAR" | "COVER" | "CONTENT") {
@@ -360,7 +392,6 @@ export default function Home() {
     const isCurrent = () => purpose === "AVATAR"
       ? editorOperationRef.current === operationId
       : editorAsyncCompletionIsCurrent(editorAsyncTargetRef.current, started, editorOperationRef.current, operationId);
-    setBusy(true);
     try {
       const form = new FormData(); form.set("file", file); form.set("purpose", purpose);
       const data = await api("/api/media", { method: "POST", body: form });
@@ -375,13 +406,12 @@ export default function Home() {
           editorFormRef.current = next;
           return next;
         });
-        setEditorDirty(true);
+        updateEditorDirty(true);
         setSaveState("有未保存的修改");
       }
       if (isCurrent()) notify("图片已安全上传");
     } catch (error) { if (isCurrent()) notify(error instanceof Error ? error.message : "上传失败"); } finally {
       if (editorMutationLock.release(uploadToken)) setMediaUploadBusy(false);
-      if (isCurrent()) setBusy(false);
     }
   }
 
@@ -392,6 +422,7 @@ export default function Home() {
     const operationId = ++editorOperationRef.current;
     const isCurrent = () => editorAsyncCompletionIsCurrent(editorAsyncTargetRef.current, started, editorOperationRef.current, operationId);
     const submitted = { ...editorFormRef.current };
+    const submittedBaseline = localDraft.captureServerSaveBaseline();
     setBusy(true); setSaveState("正在保存…");
     try {
       const data = await api("/api/posts", { method: "POST", body: JSON.stringify({ title: submitted.title, summary: submitted.summary, content: submitted.content, visibility: submitted.visibility, coverImage: submitted.coverImage || null, tags: submitted.tags.split(",").map((tag) => tag.trim()).filter(Boolean) }) });
@@ -399,13 +430,14 @@ export default function Home() {
       if (!isCurrent()) return;
       const latest = editorFormRef.current;
       if (serverSaveContainsLatestFields(latest, submitted)) {
-        localDraft.clearAfterServerSave(submitted);
-        setEditorDirty(false);
+        localDraft.clearAfterServerSave(submitted, submittedBaseline);
+        if (editorEmergencyDraftForScope(editorEmergencyDraftRef.current, started.userId, started.draftId)) editorEmergencyDraftRef.current = null;
+        updateEditorDirty(false);
         setSaveState(action === "SUBMIT" ? "已提交审核" : "草稿已安全保存");
         notify(action === "SUBMIT" ? "文章已提交审核" : "草稿已保存");
       } else {
         localDraft.persistNow(latest);
-        setEditorDirty(true);
+        updateEditorDirty(true);
         setSaveState("服务器已保存较早版本，本地仍有未保存修改");
         notify("服务器已保存较早版本，本地修改仍保留");
       }
@@ -521,7 +553,7 @@ export default function Home() {
 
         {view === "studio" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">CREATOR STUDIO</span><h1>我的文章</h1><p>管理草稿、提交审核并追踪发布状态。发布路径由账户的 publishingPolicy 决定。</p></div><button className="btn-primary" onClick={() => openEditor("new")}>＋ 新建文章</button></div><div className="policy-banner"><span>当前发布策略</span><b>REVIEW_REQUIRED</b><p>新文章需要 Editor、Admin 或 Owner 审核。策略由管理员按用户单独设置。</p></div><div className="stat-grid"><div><span>草稿</span><b>3</b><small>其中 1 篇本周更新</small></div><div><span>待审核</span><b>2</b><small>平均 1.4 天完成</small></div><div><span>已发布</span><b>18</b><small>累计 8,492 次阅读</small></div><div><span>被退回</span><b>1</b><small>等待修改后重新提交</small></div></div><div className="table-card"><div className="table-row table-head"><span>文章</span><span>状态</span><span>可见性</span><span>更新时间</span><span /></div>{[["Azure 上的容器化 Next.js 实践","草稿","PRIVATE","今天"],["用 Next.js 构建可迁移的内容平台","已发布","PUBLIC","7 月 5 日"],["群聊知识库的内容治理","待审核","MEMBERS_ONLY","7 月 3 日"],["一次失败的缓存优化复盘","被退回","MEMBERS_ONLY","6 月 28 日"]].map((row) => <div className="table-row" key={row[0]}><span><b>{row[0]}</b><small>技术文章</small></span><span><i className={`status status-${row[1]}`}>{row[1]}</i></span><span>{row[2]}</span><span>{row[3]}</span><button onClick={() => openEditor(row[0])}>编辑</button></div>)}</div></section>}
 
-        {view === "editor" && <section className="editor-page page-enter"><div className="editor-top"><button className="back-link" onClick={() => navigate("studio")}>← 我的文章</button><span role="status" aria-live="polite">{editorStatus}</span><div><button className="btn-secondary" disabled={!editorCanEdit} onClick={() => notify("预览使用与详情页相同的安全 Markdown 渲染器")}>预览</button><button className="btn-secondary" disabled={busy || !editorCanEdit} onClick={() => createDraft("SAVE")}>保存草稿</button><button className="btn-primary" disabled={busy || !editorCanEdit} onClick={() => createDraft("SUBMIT")}>提交审核</button></div></div>{localDraft.recovery && <div className="draft-recovery" role="status"><div><b>发现本地草稿</b><span>保存于 {new Date(localDraft.recovery.savedAt).toLocaleString("zh-CN", { hour12: false })}。请先恢复或放弃；在此之前编辑器保持锁定，避免覆盖本地内容。</span></div><button className="btn-primary" type="button" onClick={restoreLocalDraft}>恢复内容</button><button className="btn-ghost" type="button" onClick={discardLocalDraft}>放弃恢复</button></div>}<div className="editor-shell"><fieldset className="editor-fields" disabled={!editorCanEdit}><label>文章标题<input value={editorForm.title} onChange={(e) => updateEditorField("title", e.target.value)} placeholder="一个清晰、具体的标题" /></label><label>摘要<textarea value={editorForm.summary} onChange={(e) => updateEditorField("summary", e.target.value)} placeholder="用两句话说明读者会获得什么" /></label><div className="editor-meta"><label>可见性<select value={editorForm.visibility} onChange={(e) => updateEditorField("visibility", e.target.value as EditorDraftFields["visibility"])}><option value="PUBLIC">公开</option><option value="MEMBERS_ONLY">仅成员</option><option value="PRIVATE">私密</option></select></label><label>标签<input value={editorForm.tags} onChange={(e) => updateEditorField("tags", e.target.value)} /></label></div><label className="content-field">Markdown 正文<textarea value={editorForm.content} onChange={(e) => updateEditorField("content", e.target.value)} /></label></fieldset><aside className="editor-guide"><span className="secure-badge">● Server validated</span><h3>发布检查</h3><div><span>标题与摘要</span><b>{editorForm.title && editorForm.summary ? "✓" : "—"}</b></div><div><span>正文内容</span><b>{editorForm.content.length > 50 ? "✓" : "—"}</b></div><div><span>XSS 清理</span><b>提交时执行</b></div><div><span>审核策略</span><b>REVIEW_REQUIRED</b></div><p>未提交的编辑内容会防抖保存到此设备；离开页面前会同步刷新。正式保存只会清理与提交快照完全一致的本地副本。</p></aside></div></section>}
+        {view === "editor" && <section className="editor-page page-enter"><div className="editor-top"><button className="back-link" onClick={() => navigate("studio")}>← 我的文章</button><span role="status" aria-live="polite">{editorStatus}</span><div><button className="btn-secondary" disabled={!editorCanEdit} onClick={() => notify("预览使用与详情页相同的安全 Markdown 渲染器")}>预览</button><button className="btn-secondary" disabled={busy || !editorCanEdit} onClick={() => createDraft("SAVE")}>保存草稿</button><button className="btn-primary" disabled={busy || !editorCanEdit} onClick={() => createDraft("SUBMIT")}>提交审核</button></div></div>{localDraft.recovery && <div className="draft-recovery" role="status"><div><b>{localDraft.recoveryKind === "conflict" ? "另一标签页已有更新" : "发现本地草稿"}</b><span>保存于 {new Date(localDraft.recovery.savedAt).toLocaleString("zh-CN", { hour12: false })}。{localDraft.recoveryKind === "conflict" ? "请选择使用较新版本，或明确保留本页内容；选择前不会覆盖任何一方。" : "请先恢复或放弃；在此之前编辑器保持锁定，避免覆盖本地内容。"}</span></div><button className="btn-primary" type="button" onClick={restoreLocalDraft}>{localDraft.recoveryKind === "conflict" ? "使用较新版本" : "恢复内容"}</button><button className="btn-ghost" type="button" onClick={discardLocalDraft}>{localDraft.recoveryKind === "conflict" ? "保留本页内容" : "放弃恢复"}</button></div>}<div className="editor-shell"><fieldset className="editor-fields" disabled={!editorCanEdit}><label>文章标题<input value={editorForm.title} onChange={(e) => updateEditorField("title", e.target.value)} placeholder="一个清晰、具体的标题" /></label><label>摘要<textarea value={editorForm.summary} onChange={(e) => updateEditorField("summary", e.target.value)} placeholder="用两句话说明读者会获得什么" /></label><div className="editor-meta"><label>可见性<select value={editorForm.visibility} onChange={(e) => updateEditorField("visibility", e.target.value as EditorDraftFields["visibility"])}><option value="PUBLIC">公开</option><option value="MEMBERS_ONLY">仅成员</option><option value="PRIVATE">私密</option></select></label><label>标签<input value={editorForm.tags} onChange={(e) => updateEditorField("tags", e.target.value)} /></label></div><label className="content-field">Markdown 正文<textarea value={editorForm.content} onChange={(e) => updateEditorField("content", e.target.value)} /></label></fieldset><aside className="editor-guide"><span className="secure-badge">● Server validated</span><h3>发布检查</h3><div><span>标题与摘要</span><b>{editorForm.title && editorForm.summary ? "✓" : "—"}</b></div><div><span>正文内容</span><b>{editorForm.content.length > 50 ? "✓" : "—"}</b></div><div><span>XSS 清理</span><b>提交时执行</b></div><div><span>审核策略</span><b>REVIEW_REQUIRED</b></div><p>未提交的编辑内容会防抖保存到此设备；离开页面前会同步刷新。正式保存只会清理与提交快照完全一致的本地副本。</p></aside></div></section>}
 
         {view === "admin" && <section className="page section page-enter"><div className="studio-head"><div><span className="kicker">ADMIN CONSOLE</span><h1>内容审核</h1><p>Editor、Admin、Owner 可审核他人的待审核文章；自审会被服务端拒绝。</p></div><span className="secure-badge">● Server protected</span></div><div className="admin-tabs"><button className="selected">待审核 2</button><button onClick={() => navigate("users")}>用户管理</button><button onClick={() => navigate("audit")}>审计日志</button></div><div className="review-grid"><div className="review-card"><div><span className="pill">PENDING_REVIEW</span><h3>群聊知识库的内容治理</h3><p>提交者：Mika · 2 小时前 · MEMBERS_ONLY</p><blockquote>文章阐述如何从即时讨论中提取结构化、可复用的群体知识。</blockquote></div><div><button className="btn-secondary" onClick={() => notify("退回操作要求填写原因，并会写入审计日志")}>请求修改</button><button className="btn-primary" onClick={() => notify("审核 API 会再次检查审核人与作者不同")}>批准发布</button></div></div><div className="permission-panel"><h3>权限边界</h3>{[["文章审核","Editor +"],["修改发布策略","Admin +"],["修改用户角色","Admin +"],["网站设置","Owner"]].map((r) => <div key={r[0]}><span>{r[0]}</span><b>{r[1]}</b></div>)}</div></div></section>}
 
