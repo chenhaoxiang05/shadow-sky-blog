@@ -27,7 +27,10 @@ python3 -m http.server 8765
 2. **`DEFAULT_POSTS`**：增删或替换群友文章，支持 `title`、`author`、`cat`（`TECH` / `ESSAY` / `MEDIA` / `CHAOS`）、`date`、`readTime`、`featured`、`tags`、`coverTheme`（`vortex` / `eclipse` / `prism` / `wolf` / `grid` / `wave`）、`excerpt`、`pullQuote` 以及 Markdown 风格的 `body`（支持 `##` 标题、`>` 引用、`*` 列表和 ` ``` ` 代码块）。
 3. **`DEFAULT_SIGNALS` & `MARQUEE_PHRASES_1 / 2`**：替换「夜间信号壁」的初始群聊短讯与跑马灯语录。
 
-> 提示：页面内置的「+ 投稿 / WRITE」、点赞共鸣、评论区及夜间信号发射功能默认保存在访问者的浏览器 `localStorage` 中；如需让所有访客看到新文章，直接把文章写进 `DEFAULT_POSTS` 并推送到 `main` 分支即可。
+> 提示：
+> - 支持 **`⌘K` / `Ctrl+K`** 快捷命令面板搜索文章、切换图腾领域或筛选群友。
+> - 阅读文章时会自动生成 `#post=<id>` 直达链接，右上角支持 **`SHARE ↗`** 复制分享链接与 **`JSON`** 导出结构化文章对象。
+> - 页面内置的「+ 投稿 / WRITE」、点赞共鸣、评论区及夜间信号发射功能默认保存在访问者的浏览器 `localStorage` 中；如需让所有访客看到新文章，直接把导出或编写的文章写进 `DEFAULT_POSTS` 并推送到 `main` 分支即可。
 
 ---
 

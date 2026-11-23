@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SHADOWSKY // 暗影苍穹 · 群聊共同志</title>
   <meta name="description" content="ShadowSky Collective Blog — A creative-coded digital archive of code, essays, late-night radio, and group chaos." />
+  <meta name="theme-color" content="#07070a" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="SHADOWSKY // 暗影苍穹 · 群聊共同志" />
+  <meta property="og:description" content="在深夜频率里打捞代码、影像、胡话与星光 — ShadowSky 群友共创的数字档案室" />
+  <meta property="og:url" content="https://chenhaoxiang05.github.io/shadow-sky-blog/" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2307070A'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23F2F4F8' stroke-width='2.5'/%3E%3Cpath d='M32 8v48M8 32h48' stroke='%236BE5FF' stroke-opacity='0.45' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%23FF1E42'/%3E%3C/svg%3E" />
   <style>
     :root {
       /* Obsidian Void Palette (wodniack.dev) */
@@ -133,36 +139,55 @@
     }
 
     .cursor-ring {
-      width: 34px;
-      height: 34px;
-      margin: -17px 0 0 -17px;
+      width: 32px;
+      height: 32px;
+      margin: -16px 0 0 -16px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.55);
-      background: rgba(7, 7, 10, 0.12);
+      background: rgba(7, 7, 10, 0.10);
       backdrop-filter: blur(2px);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      color: #ffffff;
       transition: width 0.28s var(--ease-expo), height 0.28s var(--ease-expo), margin 0.28s var(--ease-expo), background-color 0.25s ease, border-color 0.25s ease, opacity 0.25s ease;
     }
 
-    .cursor-ring.is-labeled {
-      width: 78px;
-      height: 30px;
-      margin: -15px 0 0 -39px;
+    .cursor-tag {
+      position: absolute;
+      left: 26px;
+      top: 22px;
+      padding: 3px 9px;
+      border-radius: 999px;
       background: var(--crimson);
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      white-space: nowrap;
+      opacity: 0;
+      transform: translateY(-4px) scale(0.92);
+      transition: opacity 0.2s ease, transform 0.2s var(--ease-expo);
+      box-shadow: 0 6px 20px rgba(255, 30, 66, 0.42);
+      pointer-events: none;
+    }
+
+    .cursor-ring.is-labeled {
+      width: 42px;
+      height: 42px;
+      margin: -21px 0 0 -21px;
+      background: rgba(255, 30, 66, 0.08);
       border-color: var(--crimson);
-      box-shadow: 0 6px 24px rgba(255, 30, 66, 0.45);
+    }
+
+    .cursor-ring.is-labeled .cursor-tag {
+      opacity: 1;
+      transform: translateY(0) scale(1);
     }
 
     .cursor-ring.is-light-mode:not(.is-labeled) {
       border-color: rgba(11, 11, 16, 0.55);
-      background: rgba(243, 239, 230, 0.2);
+      background: rgba(243, 239, 230, 0.18);
     }
 
     /* Setpiece 0: Snappy Telemetry Preloader */
@@ -262,8 +287,18 @@
     }
 
     .navbar.is-light {
-      background: rgba(243, 239, 230, 0.84);
+      background: rgba(243, 239, 230, 0.88);
       border-bottom-color: var(--line-chalk);
+      color: var(--ink-dark);
+    }
+
+    .navbar.is-light .nav-link {
+      color: rgba(11, 11, 16, 0.72);
+      opacity: 1;
+    }
+
+    .navbar.is-light .nav-link:hover,
+    .navbar.is-light .nav-link.is-active {
       color: var(--ink-dark);
     }
 
@@ -362,7 +397,14 @@
     }
 
     .navbar.is-light .pill-btn {
-      border-color: var(--line-chalk-strong);
+      color: var(--ink-dark);
+      border-color: rgba(11, 11, 16, 0.35);
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .navbar.is-light .pill-btn:hover {
+      border-color: var(--crimson);
+      color: var(--crimson);
     }
 
     .pill-btn:hover {
@@ -571,8 +613,8 @@
       z-index: 2;
       pointer-events: none;
       background:
-        radial-gradient(circle at 50% 48%, rgba(7, 7, 10, 0.28) 0%, rgba(7, 7, 10, 0.62) 62%, rgba(7, 7, 10, 0.92) 100%),
-        linear-gradient(180deg, rgba(7, 7, 10, 0.72) 0%, rgba(7, 7, 10, 0.15) 35%, rgba(7, 7, 10, 0.25) 68%, rgba(7, 7, 10, 0.9) 100%);
+        radial-gradient(circle at 50% 50%, rgba(7, 7, 10, 0.08) 0%, rgba(7, 7, 10, 0.44) 64%, rgba(7, 7, 10, 0.90) 100%),
+        linear-gradient(180deg, rgba(7, 7, 10, 0.66) 0%, rgba(7, 7, 10, 0.08) 36%, rgba(7, 7, 10, 0.16) 68%, rgba(7, 7, 10, 0.88) 100%);
     }
 
     .hero-corners {
@@ -643,9 +685,9 @@
     .hero-title {
       font-family: var(--font-display);
       font-weight: 800;
-      font-size: clamp(3.4rem, 11.2vw, 9.6rem);
-      line-height: 0.88;
-      letter-spacing: -0.045em;
+      font-size: clamp(2.55rem, 11.0vw, 9.4rem);
+      line-height: 0.9;
+      letter-spacing: -0.04em;
       text-transform: uppercase;
       user-select: none;
       margin-bottom: 16px;
@@ -653,6 +695,7 @@
 
     .hero-line {
       display: block;
+      white-space: nowrap;
     }
 
     .hero-char {
@@ -666,14 +709,23 @@
       text-shadow: 0 0 32px rgba(255, 30, 66, 0.65);
     }
 
+    .hero-line--outline {
+      font-family: var(--font-sans);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-top: 4px;
+    }
+
     .hero-line--outline .hero-char {
-      color: transparent;
-      -webkit-text-stroke: 1.5px rgba(242, 244, 248, 0.88);
+      color: rgba(242, 244, 248, 0.12);
+      -webkit-text-stroke: 1.5px rgba(242, 244, 248, 0.92);
+      text-shadow: 0 0 26px rgba(107, 229, 255, 0.18);
     }
 
     .hero-line--outline .hero-char:hover {
       color: var(--crimson);
       -webkit-text-stroke: 1.5px var(--crimson);
+      text-shadow: 0 0 34px rgba(255, 30, 66, 0.72);
     }
 
     .hero-cn-sub {
@@ -682,37 +734,48 @@
       font-size: clamp(1rem, 2.2vw, 1.45rem);
       letter-spacing: 0.38em;
       color: var(--cyan);
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       text-indent: 0.38em;
     }
 
     .hero-manifesto {
-      max-width: 600px;
-      font-size: clamp(0.94rem, 1.35vw, 1.08rem);
-      color: #c8cedb;
+      max-width: 740px;
+      font-size: clamp(0.92rem, 1.3vw, 1.06rem);
+      color: #d6dce8;
       font-weight: 400;
       line-height: 1.7;
-      background: rgba(7, 7, 10, 0.45);
-      padding: 8px 16px;
-      border-radius: 12px;
-      backdrop-filter: blur(6px);
+      text-wrap: balance;
+      text-shadow: 0 2px 18px rgba(7, 7, 10, 0.95);
     }
 
     .hero-bottom {
       position: relative;
       z-index: 4;
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       justify-content: space-between;
-      gap: 20px;
-      flex-wrap: wrap;
+      gap: 16px;
+      flex-wrap: nowrap;
     }
 
     .hero-ctas {
       display: flex;
       align-items: center;
-      gap: 14px;
-      flex-wrap: wrap;
+      gap: 12px;
+      flex-wrap: nowrap;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 980px) {
+      .hero-bottom {
+        flex-wrap: wrap;
+      }
+      .hero-ctas {
+        flex-wrap: wrap;
+        flex-shrink: 1;
+        width: 100%;
+        max-width: 100%;
+      }
     }
 
     .scroll-orb {
@@ -756,6 +819,19 @@
       letter-spacing: 0.1em;
     }
 
+    .hint-touch {
+      display: none;
+    }
+
+    @media (hover: none), (max-width: 768px) {
+      .hint-desktop {
+        display: none;
+      }
+      .hint-touch {
+        display: inline;
+      }
+    }
+
     /* ============================================================
        SETPIECE 2: SPECIES-IN-PIECES 24-SHARD PURE CSS POLYGON MORPH
        ============================================================ */
@@ -779,6 +855,7 @@
       align-items: center;
       justify-content: center;
       perspective: 1100px;
+      margin-bottom: 26px;
     }
 
     .totem-aura {
@@ -854,13 +931,13 @@
 
     .totem-stage-hud {
       position: absolute;
-      bottom: 14px;
+      bottom: -28px;
       left: 50%;
       transform: translateX(-50%);
-      padding: 5px 12px;
+      padding: 5px 14px;
       border-radius: 999px;
-      background: rgba(7, 7, 10, 0.85);
-      border: 1px solid var(--line-dark);
+      background: rgba(14, 15, 22, 0.92);
+      border: 1px solid var(--line-dark-strong);
       font-family: var(--font-mono);
       font-size: 10px;
       letter-spacing: 0.14em;
@@ -959,8 +1036,9 @@
     .totem-tab-code {
       font-family: var(--font-display);
       font-weight: 700;
-      font-size: 15px;
+      font-size: 14px;
       letter-spacing: 0.04em;
+      white-space: nowrap;
     }
 
     .totem-tab-label {
@@ -1313,7 +1391,7 @@
     /* Wodniack-Style Interactive Editorial Archive Table */
     .archive-head {
       display: grid;
-      grid-template-columns: 74px minmax(0, 1.8fr) 120px 110px 150px 44px;
+      grid-template-columns: 52px minmax(0, 2.35fr) 92px 86px 136px 32px;
       gap: 16px;
       padding: 0 18px 12px;
       border-bottom: 1px solid var(--ink-dark);
@@ -1332,7 +1410,7 @@
     .archive-row {
       position: relative;
       display: grid;
-      grid-template-columns: 74px minmax(0, 1.8fr) 120px 110px 150px 44px;
+      grid-template-columns: 52px minmax(0, 2.35fr) 92px 86px 136px 32px;
       gap: 16px;
       align-items: center;
       padding: 22px 18px;
@@ -1388,11 +1466,26 @@
 
     .row-title {
       font-weight: 700;
-      font-size: clamp(1rem, 1.55vw, 1.24rem);
-      line-height: 1.35;
-      white-space: nowrap;
+      font-size: clamp(1rem, 1.48vw, 1.22rem);
+      line-height: 1.38;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
+    }
+
+    .row-mobile-meta {
+      display: none;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--ink-chalk-muted);
+    }
+
+    .archive-row:hover .row-mobile-meta {
+      color: rgba(243, 239, 230, 0.78);
     }
 
     .row-tags {
@@ -1526,7 +1619,7 @@
       inset: 0;
       z-index: 2;
       pointer-events: none;
-      background: radial-gradient(circle at 50% 50%, rgba(7, 7, 10, 0.32) 0%, rgba(7, 7, 10, 0.84) 100%);
+      background: radial-gradient(circle at 50% 50%, rgba(7, 7, 10, 0.12) 0%, rgba(7, 7, 10, 0.68) 100%);
     }
 
     .signal-content {
@@ -1634,12 +1727,32 @@
     }
 
     .signal-log {
-      max-height: 310px;
+      max-height: 390px;
       overflow-y: auto;
       padding: 16px 22px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 30, 66, 0.48) rgba(255, 255, 255, 0.04);
+    }
+
+    .signal-log::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .signal-log::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 999px;
+    }
+
+    .signal-log::-webkit-scrollbar-thumb {
+      background: rgba(255, 30, 66, 0.45);
+      border-radius: 999px;
+    }
+
+    .signal-log::-webkit-scrollbar-thumb:hover {
+      background: var(--crimson);
     }
 
     .signal-entry {
@@ -1851,29 +1964,37 @@
 
     /* Monumental Architectural Footer */
     .footer-wrap {
-      container-type: inline-size;
+      padding-top: 8px;
     }
 
     .footer-wordmark {
       width: 100%;
-      text-align: center;
-      font-family: var(--font-display);
-      font-weight: 800;
-      font-size: clamp(1.45rem, 8.6cqi, 7.0rem);
-      line-height: 0.94;
-      letter-spacing: -0.045em;
-      white-space: nowrap;
-      color: transparent;
-      -webkit-text-stroke: 1px rgba(255, 255, 255, 0.24);
-      user-select: none;
-      padding: 24px 0 28px;
+      padding: 24px 0 22px;
       border-top: 1px solid var(--line-dark);
-      transition: -webkit-text-stroke 0.4s ease, color 0.4s ease;
+      user-select: none;
     }
 
-    .footer-wordmark:hover {
-      -webkit-text-stroke: 1px var(--crimson);
-      color: rgba(255, 30, 66, 0.08);
+    .footer-wordmark-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: visible;
+    }
+
+    .footer-wordmark-text {
+      font-family: "Space Grotesk", "PingFang SC", sans-serif;
+      font-weight: 700;
+      font-size: 164px;
+      letter-spacing: -0.04em;
+      fill: rgba(242, 244, 248, 0.02);
+      stroke: rgba(255, 255, 255, 0.28);
+      stroke-width: 1.5;
+      transition: stroke 0.35s ease, fill 0.35s ease;
+    }
+
+    .footer-wordmark:hover .footer-wordmark-text {
+      stroke: var(--crimson);
+      fill: rgba(255, 30, 66, 0.09);
     }
 
     .footer-bar {
@@ -1999,6 +2120,31 @@
       flex: 1;
       overflow-y: auto;
       padding: clamp(24px, 4vw, 48px);
+      padding-bottom: 72px;
+    }
+
+    .reader-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .reader-action-btn {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line-chalk-strong);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      color: var(--ink-dark);
+      transition: all 0.25s ease;
+    }
+
+    .reader-action-btn:hover {
+      border-color: var(--crimson);
+      color: var(--crimson);
     }
 
     .reader-hero-art {
@@ -2351,6 +2497,123 @@
       border-color: var(--crimson);
     }
 
+    /* Command Palette (⌘K) */
+    .cmd-card {
+      width: min(620px, 100%);
+      background: rgba(14, 15, 22, 0.96);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--line-dark-strong);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 32px 96px rgba(0, 0, 0, 0.72);
+      color: var(--ink-light);
+      transform: translateY(14px);
+      transition: transform 0.3s var(--ease-expo);
+    }
+
+    .modal.is-open .cmd-card {
+      transform: translateY(0);
+    }
+
+    .cmd-input-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line-dark);
+    }
+
+    .cmd-input-row span {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--crimson);
+    }
+
+    .cmd-input {
+      flex: 1;
+      font-size: 15px;
+      color: var(--ink-light);
+      font-family: var(--font-sans);
+    }
+
+    .cmd-input::placeholder {
+      color: var(--ink-dim);
+    }
+
+    .cmd-esc {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--line-dark-strong);
+      color: var(--ink-muted);
+    }
+
+    .cmd-list {
+      max-height: 360px;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .cmd-item {
+      width: 100%;
+      text-align: left;
+      padding: 11px 14px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      transition: background-color 0.16s ease, color 0.16s ease;
+    }
+
+    .cmd-item:hover,
+    .cmd-item.is-selected {
+      background: rgba(255, 30, 66, 0.16);
+      color: #ffffff;
+    }
+
+    .cmd-item-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .cmd-item-title {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cmd-item-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--ink-muted);
+      letter-spacing: 0.08em;
+    }
+
+    .cmd-item-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--line-dark-strong);
+      color: var(--cyan);
+      flex-shrink: 0;
+    }
+
+    /* Mobile Floating Bottom Dock */
+    .mobile-dock {
+      display: none;
+    }
+
     /* Scroll Reveal Animations */
     [data-reveal] {
       opacity: 0;
@@ -2365,11 +2628,46 @@
 
     /* Responsive Adjustments */
     @media (max-width: 980px) {
+      .cursor-dot,
+      .cursor-ring {
+        display: none !important;
+      }
       .nav-links {
         display: none;
       }
       .telemetry-rail {
         display: none;
+      }
+      .mobile-dock {
+        position: fixed;
+        left: 50%;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        z-index: 4200;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 5px 6px;
+        border-radius: 999px;
+        background: rgba(10, 11, 16, 0.88);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.52);
+      }
+      .dock-link {
+        padding: 7px 11px;
+        border-radius: 999px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        color: var(--ink-muted);
+        white-space: nowrap;
+        transition: background-color 0.2s ease, color 0.2s ease;
+      }
+      .dock-link.is-active {
+        background: var(--crimson);
+        color: #ffffff;
       }
       .totem-grid {
         grid-template-columns: 1fr;
@@ -2381,16 +2679,23 @@
         display: none;
       }
       .archive-row {
-        grid-template-columns: 44px minmax(0, 1fr) 36px;
+        grid-template-columns: 38px minmax(0, 1fr) 28px;
         gap: 10px;
+        padding: 18px 10px;
       }
       .row-author,
       .row-cat,
       .row-date {
         display: none;
       }
+      .row-mobile-meta {
+        display: flex;
+      }
       .crew-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .crew-section {
+        padding-bottom: 104px;
       }
       .signal-form {
         grid-template-columns: 1fr;
@@ -2400,7 +2705,67 @@
       }
     }
 
+    @media (max-width: 768px) {
+      .signal-entry {
+        grid-template-columns: auto 1fr;
+        gap: 6px 10px;
+      }
+      .signal-msg {
+        grid-column: 1 / -1;
+      }
+    }
+
     @media (max-width: 640px) {
+      .navbar {
+        padding: 0 14px;
+      }
+      .brand {
+        font-size: 13px;
+        gap: 8px;
+      }
+      .brand-emblem {
+        width: 22px;
+        height: 22px;
+      }
+      .nav-actions {
+        gap: 6px;
+      }
+      .cmd-trigger {
+        display: none;
+      }
+      .sound-text {
+        display: none;
+      }
+      .pill-btn {
+        padding: 7px 10px;
+      }
+      .cta-btn {
+        padding: 7px 12px;
+      }
+      .cta-en {
+        display: none;
+      }
+      .hero {
+        padding: 80px 16px 84px;
+      }
+      .signal-pill {
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        padding: 6px 12px;
+        white-space: nowrap;
+      }
+      .signal-pill-extra {
+        display: none;
+      }
+      .hero-coords {
+        display: none;
+      }
+      .hero-corners {
+        font-size: 10px;
+      }
+      .hero-title {
+        font-size: clamp(2.35rem, 11.4vw, 4.2rem);
+      }
       .crew-grid {
         grid-template-columns: 1fr;
       }
@@ -2432,7 +2797,7 @@
 
   <!-- Custom Dual-Layer Cursor -->
   <div class="cursor-dot" id="cursor-dot" aria-hidden="true"></div>
-  <div class="cursor-ring" id="cursor-ring" aria-hidden="true"></div>
+  <div class="cursor-ring" id="cursor-ring" aria-hidden="true"><span class="cursor-tag" id="cursor-tag"></span></div>
 
   <!-- Setpiece 0: Snappy Telemetry Preloader -->
   <div class="preloader" id="preloader" title="Click to skip">
@@ -2471,12 +2836,15 @@
     </nav>
 
     <div class="nav-actions">
-      <button type="button" class="pill-btn" id="sound-toggle" data-cursor="AUDIO" aria-pressed="false">
-        <span id="sound-dot">●</span>
-        <span id="sound-label">SOUND: OFF</span>
+      <button type="button" class="pill-btn cmd-trigger" id="open-cmd-btn" data-cursor="CMD" title="打开快捷命令面板 (⌘K / Ctrl+K)">
+        <span>⌘K</span>
+      </button>
+      <button type="button" class="pill-btn" id="sound-toggle" data-cursor="AUDIO" aria-pressed="false" title="Toggle Web Audio Synth">
+        <span id="sound-dot">♪</span>
+        <span class="sound-text" id="sound-label">SOUND: OFF</span>
       </button>
       <button type="button" class="cta-btn" id="open-composer" data-magnetic data-cursor="WRITE">
-        <span>+ 投稿 / WRITE</span>
+        <span>+ 投稿<span class="cta-en"> / WRITE</span></span>
       </button>
     </div>
   </header>
@@ -2504,8 +2872,8 @@
 
       <div class="hero-corners">
         <div class="meta-group">
-          <span>LAT 31.23°N / LON 121.47°E</span>
-          <span id="hero-clock">00:00:00 UTC+8</span>
+          <span class="hero-coords">LAT 31.23°N / LON 121.47°E</span>
+          <span id="hero-clock">00:00:00 LOCAL</span>
         </div>
         <div class="meta-group">
           <span id="hero-fps">60 FPS · VORTEX</span>
@@ -2516,7 +2884,7 @@
       <div class="hero-center">
         <div class="signal-pill">
           <span class="pulse-dot"></span>
-          <span>SIGNAL ACTIVE · 6 MEMBERS · SHADOWSKY COLLECTIVE BLOG</span>
+          <span>SIGNAL ACTIVE · 6 MEMBERS<span class="signal-pill-extra"> · SHADOWSKY COLLECTIVE BLOG</span></span>
         </div>
 
         <h1 class="hero-title" aria-label="ShadowSky">
@@ -2545,7 +2913,10 @@
           </button>
         </div>
 
-        <span class="hero-hint">[ MOVE CURSOR TO BEND GRAVITY · CLICK FOR PULSE ]</span>
+        <span class="hero-hint">
+          <span class="hint-desktop">[ MOVE CURSOR · CLICK FOR PULSE · ⌘K ]</span>
+          <span class="hint-touch">[ TAP CANVAS FOR GRAVITY PULSE ]</span>
+        </span>
 
         <a href="#totem" class="scroll-orb" data-magnetic data-cursor="SCROLL" aria-label="Scroll to Totem">
           <span>SCROLL</span>
@@ -2741,7 +3112,11 @@
         <div class="crew-grid" id="crew-grid" data-reveal></div>
 
         <footer class="footer-wrap" data-reveal>
-          <div class="footer-wordmark" aria-hidden="true">SHADOWSKY</div>
+          <div class="footer-wordmark" aria-hidden="true">
+            <svg class="footer-wordmark-svg" viewBox="0 0 1200 170" role="presentation">
+              <text class="footer-wordmark-text" x="600" y="138" text-anchor="middle">SHADOWSKY</text>
+            </svg>
+          </div>
           <div class="footer-bar">
             <span>REWRITE PREVIEW v2.0 · MADE FOR SHADOWSKY COLLECTIVE · PURE HTML/CSS/JS</span>
             <div class="footer-actions">
@@ -2768,7 +3143,11 @@
     <div class="reader-progress" id="reader-progress"></div>
     <div class="reader-topbar">
       <span class="reader-meta-pill" id="reader-topbar-meta">SHADOWSKY // ARCHIVE</span>
-      <button type="button" class="reader-close" id="reader-close" data-cursor="CLOSE">× CLOSE [ESC]</button>
+      <div class="reader-actions">
+        <button type="button" class="reader-action-btn" id="reader-share" data-cursor="SHARE">SHARE ↗</button>
+        <button type="button" class="reader-action-btn" id="reader-export-json" data-cursor="JSON">JSON</button>
+        <button type="button" class="reader-close" id="reader-close" data-cursor="CLOSE">× CLOSE [ESC]</button>
+      </div>
     </div>
     <div class="reader-scroll" id="reader-scroll">
       <div class="reader-hero-art" id="reader-hero-art"></div>
@@ -2857,6 +3236,26 @@
     </div>
   </div>
 
+  <!-- Mobile Floating Bottom Dock -->
+  <nav class="mobile-dock" id="mobile-dock" aria-label="Mobile Section Navigation">
+    <a href="#totem" class="dock-link" data-section="totem">01 图腾</a>
+    <a href="#chronicles" class="dock-link" data-section="chronicles">02 档案</a>
+    <a href="#signal" class="dock-link" data-section="signal">03 信号</a>
+    <a href="#crew" class="dock-link" data-section="crew">04 星图</a>
+  </nav>
+
+  <!-- Command Palette Modal (⌘K / Ctrl+K) -->
+  <div class="modal" id="cmd-modal" role="dialog" aria-modal="true" aria-labelledby="cmd-input">
+    <div class="cmd-card">
+      <div class="cmd-input-row">
+        <span>⌘K //</span>
+        <input type="text" class="cmd-input" id="cmd-input" placeholder="搜索文章、切换图腾、筛选成员或执行操作..." autocomplete="off" />
+        <button type="button" class="cmd-esc" id="cmd-close">ESC</button>
+      </div>
+      <div class="cmd-list" id="cmd-list"></div>
+    </div>
+  </div>
+
   <script>
     (() => {
       "use strict";
@@ -2884,7 +3283,7 @@
         {
           id: "Sora",
           name: "Sora",
-          role: "NOCTURNAL ESSAYIST · 深夜文本与电台",
+          role: "ESSAYIST · 深夜文本与电台",
           freq: "108.4 MHz",
           color: "#6BE5FF",
           accent: "#FF1E42",
@@ -2965,12 +3364,12 @@
             [82,34, 70,48, 84,54]
           ],
           colors: [
-            "#DCE7F5", "#FF1E42", "#2B3248", "#21273A",
-            "#161925", "#1C2233", "#C90E30", "#FF1E42",
-            "#2B3248", "#161925", "#242A3E", "#1F2537",
-            "#8BA4C7", "#2B3248", "#1C2233", "#DCE7F5",
-            "#8BA4C7", "#161925", "#8BA4C7", "#2B3248",
-            "#1C2233", "#DCE7F5", "#8BA4C7", "#161925"
+            "#ECF5FF", "#FF1E42", "#404E6D", "#333F59",
+            "#26304A", "#2E3B59", "#D91438", "#FF1E42",
+            "#414F6E", "#26304A", "#334162", "#2C3854",
+            "#9DB6D9", "#3B4766", "#2E3B59", "#E6F0FA",
+            "#9DB6D9", "#28334E", "#9DB6D9", "#3B4766",
+            "#2E3B59", "#E6F0FA", "#9DB6D9", "#28334E"
           ]
         },
         eclipse: {
@@ -2979,41 +3378,41 @@
           cn: "穹月 · 深夜随笔",
           cat: "ESSAY",
           telemetry: "24 POLYGONS · 72 VERTICES · 0 CANVAS · ESSAY REALM",
-          aura: "radial-gradient(circle, rgba(107, 229, 255, 0.25) 0%, rgba(255, 30, 66, 0.16) 50%, transparent 74%)",
+          aura: "radial-gradient(circle, rgba(107, 229, 255, 0.28) 0%, rgba(255, 30, 66, 0.18) 50%, transparent 74%)",
           desc: "当夜色把城市静音，新月与赤红伴星一起升空——收录不合时宜的思考、书信和温柔的胡言乱语。",
           polygons: [
-            [64,12, 42,14, 48,24],
-            [42,14, 48,24, 24,26],
-            [24,26, 48,24, 36,34],
-            [24,26, 36,34, 14,44],
-            [14,44, 36,34, 30,48],
-            [14,44, 30,48, 15,64],
-            [15,64, 30,48, 32,62],
-            [15,64, 32,62, 28,80],
-            [28,80, 32,62, 42,72],
-            [28,80, 42,72, 48,89],
-            [48,89, 42,72, 56,77],
-            [48,89, 56,77, 69,86],
-            [69,86, 56,77, 70,76],
-            [69,86, 70,76, 82,74],
-            [64,12, 48,24, 57,19],
-            [64,28, 56,44, 64,44],
-            [64,28, 72,44, 64,44],
-            [64,60, 56,44, 64,44],
-            [64,60, 72,44, 64,44],
-            [64,28, 72,44, 84,32],
-            [72,44, 88,48, 78,56],
-            [56,44, 46,38, 52,52],
-            [76,18, 84,22, 79,27],
-            [86,58, 92,62, 85,66]
+            [64,11, 42,14, 58,18],
+            [42,14, 58,18, 45,25],
+            [42,14, 24,25, 45,25],
+            [24,25, 45,25, 36,36],
+            [24,25, 15,43, 36,36],
+            [15,43, 36,36, 32,49],
+            [15,43, 16,63, 32,49],
+            [16,63, 32,49, 34,62],
+            [16,63, 28,79, 34,62],
+            [28,79, 34,62, 44,72],
+            [28,79, 48,88, 44,72],
+            [48,88, 44,72, 58,76],
+            [48,88, 69,85, 58,76],
+            [69,85, 58,76, 71,74],
+            [69,85, 81,74, 71,74],
+            [67,25, 61,43, 67,43],
+            [67,25, 73,43, 67,43],
+            [67,61, 61,43, 67,43],
+            [67,61, 73,43, 67,43],
+            [51,43, 67,38, 67,48],
+            [83,43, 67,38, 67,48],
+            [79,19, 86,23, 81,28],
+            [85,55, 92,59, 86,64],
+            [49,33, 54,36, 50,40]
           ],
           colors: [
-            "#ECF4FF", "#9AC8EC", "#4A7BA8", "#ECF4FF",
-            "#9AC8EC", "#4A7BA8", "#1D2744", "#9AC8EC",
-            "#4A7BA8", "#ECF4FF", "#9AC8EC", "#4A7BA8",
-            "#1D2744", "#9AC8EC", "#ECF4FF", "#FF1E42",
-            "#FF5C77", "#C90E30", "#FF1E42", "#9AC8EC",
-            "#4A7BA8", "#1D2744", "#FF5C77", "#ECF4FF"
+            "#F2F7FF", "#B5D7F4", "#6B9FD1", "#B5D7F4",
+            "#F2F7FF", "#6B9FD1", "#4A7BA8", "#B5D7F4",
+            "#F2F7FF", "#6B9FD1", "#4A7BA8", "#B5D7F4",
+            "#F2F7FF", "#6B9FD1", "#B5D7F4", "#FF1E42",
+            "#FF5C77", "#D41134", "#FF1E42", "#FF6E88",
+            "#FF3A5C", "#6BE5FF", "#FF5C77", "#F2F7FF"
           ]
         },
         prism: {
@@ -3094,12 +3493,12 @@
             [36,68, 64,68, 50,88]
           ],
           colors: [
-            "#242A3B", "#FF1E42", "#242A3B", "#FF1E42",
-            "#A7B2C6", "#E7ECF5", "#A7B2C6", "#242A3B",
-            "#141824", "#A7B2C6", "#242A3B", "#FF4D6D",
-            "#FF4D6D", "#E7ECF5", "#A7B2C6", "#E7ECF5",
-            "#A7B2C6", "#A7B2C6", "#242A3B", "#141824",
-            "#141824", "#E7ECF5", "#A7B2C6", "#141824"
+            "#3B4563", "#FF1E42", "#3B4563", "#FF1E42",
+            "#B5C2D9", "#EFF3FA", "#B5C2D9", "#3B4563",
+            "#2B344D", "#B5C2D9", "#3B4563", "#FF4D6D",
+            "#FF4D6D", "#EFF3FA", "#B5C2D9", "#EFF3FA",
+            "#B5C2D9", "#B5C2D9", "#3B4563", "#262F46",
+            "#262F46", "#EFF3FA", "#B5C2D9", "#2F3A57"
           ]
         }
       };
@@ -3400,80 +3799,130 @@ tailscale serve https / http://localhost:8765
           .replace(/"/g, "&quot;");
       }
 
+      let coverUid = 0;
       function generatePostCoverSVG(post) {
         const theme = post.coverTheme || "vortex";
+        const id = `c${++coverUid}`;
+        const label = escapeHTML((post.cat || theme).toUpperCase());
+        const hudLayer = `
+          <g stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="1">
+            <path d="M0 80h600M0 160h600M0 240h600"/>
+            <path d="M120 0v320M240 0v320M360 0v320M480 0v320"/>
+          </g>
+          <g stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.2" fill="none">
+            <path d="M18 30V18h12M570 18h12v12M18 290v12h12M570 302h12v-12"/>
+          </g>
+          <text x="582" y="294" text-anchor="end" fill="#8B92A5" fill-opacity="0.72" font-family="monospace" font-size="10" letter-spacing="2">FIG.${String((post.id || "01").slice(-2)).toUpperCase()} // ${label}</text>
+        `;
+
         if (theme === "eclipse") {
           return `<svg viewBox="0 0 600 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-            <rect width="600" height="320" fill="#0A0D18"/>
-            <circle cx="300" cy="160" r="118" fill="#6BE5FF" fill-opacity="0.14"/>
-            <circle cx="300" cy="160" r="82" fill="#ECF4FF"/>
-            <circle cx="328" cy="144" r="76" fill="#0A0D18"/>
-            <polygon points="418,96 426,118 448,126 426,134 418,156 410,134 388,126 410,118" fill="#FF1E42"/>
-            <line x1="0" y1="265" x2="600" y2="265" stroke="#6BE5FF" stroke-opacity="0.32" stroke-width="1"/>
-            <circle cx="110" cy="76" r="2.5" fill="#ECF4FF" fill-opacity="0.7"/>
-            <circle cx="490" cy="218" r="2" fill="#6BE5FF" fill-opacity="0.7"/>
+            <defs>
+              <radialGradient id="${id}g" cx="50%" cy="50%" r="55%">
+                <stop offset="0%" stop-color="#6BE5FF" stop-opacity="0.34"/>
+                <stop offset="52%" stop-color="#1E3A68" stop-opacity="0.16"/>
+                <stop offset="100%" stop-color="#070912" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <rect width="600" height="320" fill="#070A14"/>
+            <rect width="600" height="320" fill="url(#${id}g)"/>
+            ${hudLayer}
+            <circle cx="300" cy="156" r="118" fill="none" stroke="#6BE5FF" stroke-opacity="0.22" stroke-dasharray="4 6"/>
+            <circle cx="300" cy="156" r="82" fill="#ECF4FF"/>
+            <circle cx="332" cy="140" r="76" fill="#070A14"/>
+            <polygon points="414,96 421,121 446,128 421,135 414,160 407,135 382,128 407,121" fill="#FF1E42"/>
+            <line x1="60" y1="252" x2="540" y2="252" stroke="#6BE5FF" stroke-opacity="0.36" stroke-width="1"/>
+            <circle cx="118" cy="76" r="2.5" fill="#ECF4FF" fill-opacity="0.85"/>
+            <circle cx="486" cy="214" r="2.2" fill="#6BE5FF" fill-opacity="0.85"/>
           </svg>`;
         }
         if (theme === "prism") {
           return `<svg viewBox="0 0 600 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-            <rect width="600" height="320" fill="#0D101B"/>
-            <polygon points="300,32 165,256 300,210" fill="#38B6FF" fill-opacity="0.75"/>
-            <polygon points="300,32 435,256 300,210" fill="#7B61FF" fill-opacity="0.8"/>
-            <polygon points="165,256 300,210 300,292" fill="#182032"/>
-            <polygon points="435,256 300,210 300,292" fill="#FF1E42" fill-opacity="0.88"/>
-            <polygon points="300,98 250,185 350,185" fill="#F4FAFF" fill-opacity="0.9"/>
-            <line x1="40" y1="185" x2="250" y2="145" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="2"/>
-            <line x1="350" y1="150" x2="560" y2="108" stroke="#6BE5FF" stroke-width="2.5"/>
-            <line x1="350" y1="162" x2="560" y2="205" stroke="#FF1E42" stroke-width="2.5"/>
+            <defs>
+              <linearGradient id="${id}p" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#6BE5FF" stop-opacity="0.24"/>
+                <stop offset="50%" stop-color="#7B61FF" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#FF1E42" stop-opacity="0.22"/>
+              </linearGradient>
+            </defs>
+            <rect width="600" height="320" fill="#0A0D18"/>
+            <rect width="600" height="320" fill="url(#${id}p)"/>
+            ${hudLayer}
+            <polygon points="300,28 164,256 300,208" fill="#38B6FF" fill-opacity="0.72"/>
+            <polygon points="300,28 436,256 300,208" fill="#7B61FF" fill-opacity="0.78"/>
+            <polygon points="164,256 300,208 300,296" fill="#1E2842"/>
+            <polygon points="436,256 300,208 300,296" fill="#FF1E42" fill-opacity="0.9"/>
+            <polygon points="300,96 248,186 352,186" fill="#F4FAFF" fill-opacity="0.92"/>
+            <line x1="20" y1="184" x2="248" y2="144" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="2"/>
+            <line x1="352" y1="146" x2="580" y2="96" stroke="#6BE5FF" stroke-width="2.5"/>
+            <line x1="352" y1="158" x2="580" y2="158" stroke="#F4FAFF" stroke-opacity="0.7" stroke-width="1.5"/>
+            <line x1="352" y1="170" x2="580" y2="218" stroke="#FF1E42" stroke-width="2.5"/>
           </svg>`;
         }
         if (theme === "wolf") {
           return `<svg viewBox="0 0 600 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-            <rect width="600" height="320" fill="#0B0B12"/>
-            <polygon points="175,44 250,115 190,170" fill="#242A3B"/>
+            <rect width="600" height="320" fill="#090A12"/>
+            ${hudLayer}
+            <circle cx="300" cy="160" r="134" fill="none" stroke="#FF1E42" stroke-opacity="0.22"/>
+            <polygon points="175,44 250,115 190,170" fill="#3A4563"/>
             <polygon points="188,68 238,118 198,150" fill="#FF1E42"/>
-            <polygon points="425,44 350,115 410,170" fill="#242A3B"/>
+            <polygon points="425,44 350,115 410,170" fill="#3A4563"/>
             <polygon points="412,68 362,118 402,150" fill="#FF1E42"/>
-            <polygon points="250,115 350,115 300,192" fill="#DCE4F2"/>
-            <polygon points="190,170 250,115 300,192" fill="#8C99B2"/>
-            <polygon points="410,170 350,115 300,192" fill="#64708A"/>
-            <polygon points="235,175 274,168 252,186" fill="#FF4D6D"/>
-            <polygon points="365,175 326,168 348,186" fill="#FF4D6D"/>
-            <polygon points="240,210 360,210 300,290" fill="#181C28"/>
+            <polygon points="250,115 350,115 300,192" fill="#E8EEF8"/>
+            <polygon points="190,170 250,115 300,192" fill="#9AA8C4"/>
+            <polygon points="410,170 350,115 300,192" fill="#6F7D9E"/>
+            <polygon points="235,175 274,168 252,186" fill="#FF1E42"/>
+            <polygon points="365,175 326,168 348,186" fill="#FF1E42"/>
+            <polygon points="240,210 360,210 300,286" fill="#2A334A"/>
           </svg>`;
         }
         if (theme === "grid") {
           return `<svg viewBox="0 0 600 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-            <rect width="600" height="320" fill="#090D12"/>
-            <g stroke="#38D399" stroke-opacity="0.22" stroke-width="1">
-              <path d="M0 64h600M0 128h600M0 192h600M0 256h600"/>
-              <path d="M100 0v320M200 0v320M300 0v320M400 0v320M500 0v320"/>
+            <rect width="600" height="320" fill="#080C12"/>
+            ${hudLayer}
+            <g stroke="#38D399" stroke-opacity="0.16" stroke-width="1">
+              <path d="M0 40h600M0 120h600M0 200h600M0 280h600"/>
+              <path d="M60 0v320M180 0v320M300 0v320M420 0v320M540 0v320"/>
             </g>
-            <rect x="200" y="96" width="200" height="128" rx="12" fill="#101822" stroke="#38D399" stroke-width="2"/>
-            <circle cx="240" cy="136" r="10" fill="#FF1E42"/>
-            <rect x="270" y="130" width="96" height="12" rx="4" fill="#6BE5FF" fill-opacity="0.7"/>
-            <rect x="230" y="172" width="140" height="8" rx="4" fill="#38D399" fill-opacity="0.45"/>
+            <rect x="170" y="76" width="260" height="168" rx="14" fill="#101824" stroke="#38D399" stroke-width="1.8"/>
+            <circle cx="214" cy="116" r="10" fill="#FF1E42"/>
+            <circle cx="242" cy="116" r="6" fill="#6BE5FF"/>
+            <rect x="204" y="148" width="186" height="10" rx="4" fill="#6BE5FF" fill-opacity="0.72"/>
+            <rect x="204" y="172" width="142" height="8" rx="4" fill="#38D399" fill-opacity="0.55"/>
+            <rect x="204" y="196" width="104" height="8" rx="4" fill="#FFFFFF" fill-opacity="0.28"/>
           </svg>`;
         }
         if (theme === "wave") {
           return `<svg viewBox="0 0 600 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-            <rect width="600" height="320" fill="#0A090F"/>
-            <path d="M0 110 Q150 60 300 115 T600 105" fill="none" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="2"/>
-            <path d="M0 155 Q150 105 300 160 T600 150" fill="none" stroke="#FF1E42" stroke-opacity="0.75" stroke-width="2.2"/>
-            <path d="M0 200 Q150 150 300 205 T600 195" fill="none" stroke="#6BE5FF" stroke-opacity="0.6" stroke-width="1.8"/>
-            <path d="M0 245 Q150 195 300 250 T600 240" fill="none" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="1.4"/>
-            <circle cx="430" cy="112" r="24" fill="#FF1E42" fill-opacity="0.85"/>
+            <rect width="600" height="320" fill="#0A0910"/>
+            ${hudLayer}
+            <path d="M0 86 Q150 38 300 90 T600 80" fill="none" stroke="#F59E0B" stroke-opacity="0.45" stroke-width="1.6"/>
+            <path d="M0 122 Q150 74 300 126 T600 116" fill="none" stroke="#F59E0B" stroke-opacity="0.68" stroke-width="2"/>
+            <path d="M0 160 Q150 110 300 164 T600 154" fill="none" stroke="#FF1E42" stroke-opacity="0.88" stroke-width="2.4"/>
+            <path d="M0 198 Q150 148 300 202 T600 192" fill="none" stroke="#6BE5FF" stroke-opacity="0.72" stroke-width="2"/>
+            <path d="M0 236 Q150 186 300 240 T600 230" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.4"/>
+            <circle cx="436" cy="112" r="24" fill="#FF1E42" fill-opacity="0.9"/>
+            <circle cx="436" cy="112" r="38" fill="none" stroke="#FF1E42" stroke-opacity="0.4"/>
           </svg>`;
         }
         /* default: vortex */
         return `<svg viewBox="0 0 600 320" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="${id}v" cx="50%" cy="54%" r="52%">
+              <stop offset="0%" stop-color="#FF1E42" stop-opacity="0.34"/>
+              <stop offset="48%" stop-color="#6BE5FF" stop-opacity="0.14"/>
+              <stop offset="100%" stop-color="#07070A" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
           <rect width="600" height="320" fill="#07070A"/>
-          <ellipse cx="300" cy="172" rx="250" ry="96" fill="none" stroke="#FFFFFF" stroke-opacity="0.22"/>
-          <ellipse cx="300" cy="172" rx="196" ry="74" fill="none" stroke="#6BE5FF" stroke-opacity="0.38"/>
-          <ellipse cx="300" cy="172" rx="142" ry="52" fill="none" stroke="#FF1E42" stroke-opacity="0.65"/>
-          <ellipse cx="300" cy="172" rx="88" ry="30" fill="#07070A" stroke="#FF1E42" stroke-width="2"/>
-          <path d="M0 128 Q300 42 600 128" fill="none" stroke="#F2F4F8" stroke-opacity="0.55" stroke-width="1.5"/>
-          <circle cx="300" cy="172" r="24" fill="#07070A" stroke="#FF1E42" stroke-opacity="0.8"/>
+          <rect width="600" height="320" fill="url(#${id}v)"/>
+          ${hudLayer}
+          <ellipse cx="300" cy="172" rx="254" ry="96" fill="none" stroke="#FFFFFF" stroke-opacity="0.26"/>
+          <ellipse cx="300" cy="172" rx="200" ry="74" fill="none" stroke="#6BE5FF" stroke-opacity="0.45"/>
+          <ellipse cx="300" cy="172" rx="146" ry="52" fill="none" stroke="#FF1E42" stroke-opacity="0.78" stroke-width="1.4"/>
+          <ellipse cx="300" cy="172" rx="92" ry="30" fill="#07070A" stroke="#FF1E42" stroke-width="2"/>
+          <path d="M0 128 Q300 38 600 128" fill="none" stroke="#F2F4F8" stroke-opacity="0.6" stroke-width="1.5"/>
+          <circle cx="300" cy="172" r="24" fill="#07070A" stroke="#FF1E42" stroke-opacity="0.9"/>
         </svg>`;
       }
 
@@ -3538,6 +3987,12 @@ tailscale serve https / http://localhost:8765
       const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
       const dotEl = document.getElementById("cursor-dot");
       const ringEl = document.getElementById("cursor-ring");
+      const cursorTagEl = document.getElementById("cursor-tag");
+
+      function resetCursorLabel() {
+        if (cursorTagEl) cursorTagEl.textContent = "";
+        if (ringEl) ringEl.classList.remove("is-labeled");
+      }
 
       if (finePointer && dotEl && ringEl) {
         document.body.classList.add("custom-cursor-ready");
@@ -3557,12 +4012,11 @@ tailscale serve https / http://localhost:8765
 
           const target = e.target.closest("[data-cursor]");
           const label = target ? target.getAttribute("data-cursor") : "";
-          if (label) {
-            ringEl.textContent = label;
+          if (label && cursorTagEl) {
+            cursorTagEl.textContent = label;
             ringEl.classList.add("is-labeled");
           } else {
-            ringEl.textContent = "";
-            ringEl.classList.remove("is-labeled");
+            resetCursorLabel();
           }
 
           const inLight = e.target.closest("[data-theme='light'], .reader-drawer");
@@ -3612,12 +4066,13 @@ tailscale serve https / http://localhost:8765
         let offsetX = 0, offsetY = 0;
         let pulseWave = 0;
 
-        const particles = Array.from({ length: 140 }, (_, i) => ({
-          angle: (i / 140) * Math.PI * 2 + Math.random() * 0.5,
+        const particles = Array.from({ length: 160 }, (_, i) => ({
+          angle: (i / 160) * Math.PI * 2 + Math.random() * 0.5,
           depth: Math.random(),
-          speed: 0.0022 + Math.random() * 0.0045,
-          size: 0.9 + Math.random() * 2.1,
-          color: i % 9 === 0 ? "#FF1E42" : i % 4 === 0 ? "#6BE5FF" : "#F2F4F8"
+          speed: 0.0026 + Math.random() * 0.0048,
+          spin: (i % 2 === 0 ? 1 : -0.6) * (0.0009 + Math.random() * 0.0014),
+          size: 1.0 + Math.random() * 2.3,
+          color: i % 8 === 0 ? "#FF1E42" : i % 3 === 0 ? "#6BE5FF" : "#F2F4F8"
         }));
 
         function resizeVortex() {
@@ -3696,7 +4151,7 @@ tailscale serve https / http://localhost:8765
           /* 36 Radial Meridian Perspective Lines */
           const meridians = 36;
           for (let m = 0; m < meridians; m++) {
-            const a = (m / meridians) * Math.PI * 2 + now * 0.00004;
+            const a = (m / meridians) * Math.PI * 2 + now * 0.00005;
             const ox = cx + Math.cos(a) * outerRx;
             const oy = cy + Math.sin(a) * outerRy;
             const ix = sinkX + Math.cos(a) * 26;
@@ -3706,9 +4161,11 @@ tailscale serve https / http://localhost:8765
             ctx.moveTo(ox, oy);
             ctx.lineTo(ix, iy);
             ctx.strokeStyle = m % 6 === 0
-              ? "rgba(255, 30, 66, 0.22)"
-              : "rgba(255, 255, 255, 0.075)";
-            ctx.lineWidth = 1;
+              ? "rgba(255, 30, 66, 0.36)"
+              : m % 3 === 0
+                ? "rgba(107, 229, 255, 0.16)"
+                : "rgba(255, 255, 255, 0.12)";
+            ctx.lineWidth = m % 6 === 0 ? 1.25 : 1;
             ctx.stroke();
           }
 
@@ -3717,57 +4174,81 @@ tailscale serve https / http://localhost:8765
           const phase = (now * 0.00018) % (1 / ringCount);
           for (let r = 0; r < ringCount; r++) {
             const p = (r / ringCount + phase) % 1;
-            const exp = Math.pow(p, 2.25);
-            const rx = 24 + (outerRx - 24) * exp + pulseWave * 28 * Math.sin(p * Math.PI);
-            const ry = 10 + (outerRy - 10) * exp + pulseWave * 12 * Math.sin(p * Math.PI);
+            const exp = Math.pow(p, 2.2);
+            const rx = 26 + (outerRx - 26) * exp + pulseWave * 36 * Math.sin(p * Math.PI);
+            const ry = 12 + (outerRy - 12) * exp + pulseWave * 16 * Math.sin(p * Math.PI);
             const rxPos = sinkX + (cx - sinkX) * exp;
             const ryPos = sinkY + (cy - sinkY) * exp;
 
             ctx.beginPath();
             ctx.ellipse(rxPos, ryPos, rx, ry, 0, 0, Math.PI * 2);
-            const alpha = (0.08 + exp * 0.42) * (1 - Math.pow(1 - p, 4) * 0.4);
+            const alpha = (0.16 + exp * 0.56) * (1 - Math.pow(1 - p, 4) * 0.28);
             ctx.strokeStyle = r % 4 === 0
-              ? `rgba(255, 30, 66, ${alpha * 1.1})`
+              ? `rgba(255, 30, 66, ${Math.min(0.82, alpha * 1.2)})`
               : r % 3 === 0
-                ? `rgba(107, 229, 255, ${alpha * 0.85})`
-                : `rgba(242, 244, 248, ${alpha * 0.72})`;
-            ctx.lineWidth = 0.8 + exp * 1.1;
+                ? `rgba(107, 229, 255, ${Math.min(0.72, alpha * 0.96)})`
+                : `rgba(242, 244, 248, ${Math.min(0.65, alpha * 0.85)})`;
+            ctx.lineWidth = 0.9 + exp * 1.3;
             ctx.stroke();
           }
 
-          /* Central Obsidian Event Horizon Glow */
-          const holeGrad = ctx.createRadialGradient(sinkX, sinkY, 10, sinkX, sinkY, 120);
+          /* Central Obsidian Event Horizon + Additive Bloom Glow */
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          const bloomGrad = ctx.createRadialGradient(sinkX, sinkY, 16, sinkX, sinkY, 210);
+          bloomGrad.addColorStop(0, "rgba(255, 30, 66, 0.42)");
+          bloomGrad.addColorStop(0.42, "rgba(107, 229, 255, 0.16)");
+          bloomGrad.addColorStop(1, "rgba(7, 7, 10, 0)");
+          ctx.fillStyle = bloomGrad;
+          ctx.beginPath();
+          ctx.ellipse(sinkX, sinkY, 210, 118, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          const holeGrad = ctx.createRadialGradient(sinkX, sinkY, 8, sinkX, sinkY, 96);
           holeGrad.addColorStop(0, "rgba(7, 7, 10, 1)");
-          holeGrad.addColorStop(0.35, "rgba(7, 7, 10, 0.96)");
-          holeGrad.addColorStop(0.62, "rgba(255, 30, 66, 0.24)");
+          holeGrad.addColorStop(0.45, "rgba(7, 7, 10, 0.96)");
+          holeGrad.addColorStop(0.75, "rgba(255, 30, 66, 0.24)");
           holeGrad.addColorStop(1, "rgba(7, 7, 10, 0)");
           ctx.fillStyle = holeGrad;
           ctx.beginPath();
-          ctx.ellipse(sinkX, sinkY, 120, 66, 0, 0, Math.PI * 2);
+          ctx.ellipse(sinkX, sinkY, 96, 52, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          /* 140 Luminous Dust & Meteor Streaks */
+          /* Click Pulse Shockwave */
+          if (pulseWave > 0.01) {
+            const pProg = 1 - pulseWave;
+            ctx.beginPath();
+            ctx.ellipse(sinkX, sinkY, 36 + pProg * outerRx * 0.85, 16 + pProg * outerRy * 0.85, 0, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(255, 30, 66, ${(pulseWave * 0.85).toFixed(2)})`;
+            ctx.lineWidth = 2.4;
+            ctx.stroke();
+          }
+
+          /* 160 Luminous Spiral Dust & Meteor Streaks */
           for (let i = 0; i < particles.length; i++) {
             const pt = particles[i];
-            pt.depth -= pt.speed * (1 + pulseWave * 2.4);
+            pt.depth -= pt.speed * (1 + pulseWave * 2.5);
+            pt.angle += pt.spin * dt * 60;
             if (pt.depth <= 0.04) {
               pt.depth = 1;
               pt.angle = Math.random() * Math.PI * 2;
             }
-            const e = Math.pow(pt.depth, 2.1);
+            const e = Math.pow(pt.depth, 2.05);
             const px = sinkX + (cx - sinkX) * e + Math.cos(pt.angle) * outerRx * e;
             const py = sinkY + (cy - sinkY) * e + Math.sin(pt.angle) * outerRy * e;
 
-            const prevE = Math.pow(Math.min(1, pt.depth + 0.045), 2.1);
-            const tx = sinkX + (cx - sinkX) * prevE + Math.cos(pt.angle) * outerRx * prevE;
-            const ty = sinkY + (cy - sinkY) * prevE + Math.sin(pt.angle) * outerRy * prevE;
+            const prevE = Math.pow(Math.min(1, pt.depth + 0.058), 2.05);
+            const prevA = pt.angle - pt.spin * 1.4;
+            const tx = sinkX + (cx - sinkX) * prevE + Math.cos(prevA) * outerRx * prevE;
+            const ty = sinkY + (cy - sinkY) * prevE + Math.sin(prevA) * outerRy * prevE;
 
             ctx.beginPath();
             ctx.moveTo(tx, ty);
             ctx.lineTo(px, py);
             ctx.strokeStyle = pt.color;
-            ctx.globalAlpha = Math.min(0.95, 0.22 + (1 - pt.depth) * 0.78);
-            ctx.lineWidth = pt.size * (0.5 + e * 0.8);
+            ctx.globalAlpha = Math.min(0.98, 0.34 + (1 - pt.depth) * 0.66);
+            ctx.lineWidth = pt.size * (0.55 + e * 0.9);
             ctx.stroke();
           }
           ctx.globalAlpha = 1;
@@ -3823,6 +4304,21 @@ tailscale serve https / http://localhost:8765
         }
       }
 
+      function toClipPolygon(pts) {
+        const cx = (pts[0] + pts[2] + pts[4]) / 3;
+        const cy = (pts[1] + pts[3] + pts[5]) / 3;
+        const out = [];
+        for (let i = 0; i < 6; i += 2) {
+          const dx = pts[i] - cx;
+          const dy = pts[i + 1] - cy;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = Math.max(0, Math.min(100, pts[i] + (dx / len) * 0.26));
+          const ny = Math.max(0, Math.min(100, pts[i + 1] + (dy / len) * 0.26));
+          out.push(`${nx.toFixed(2)}% ${ny.toFixed(2)}%`);
+        }
+        return `polygon(${out.join(", ")})`;
+      }
+
       function applyTotem(key, silent = false) {
         const data = TOTEMS[key];
         if (!data) return;
@@ -3831,7 +4327,7 @@ tailscale serve https / http://localhost:8765
         data.polygons.forEach((pts, idx) => {
           const el = shardEls[idx];
           if (!el) return;
-          el.style.clipPath = `polygon(${pts[0]}% ${pts[1]}%, ${pts[2]}% ${pts[3]}%, ${pts[4]}% ${pts[5]}%)`;
+          el.style.clipPath = toClipPolygon(pts);
           el.style.backgroundColor = data.colors[idx];
         });
 
@@ -4044,6 +4540,13 @@ tailscale serve https / http://localhost:8765
                 <span class="row-index">${String(idx + 1).padStart(2, "0")}</span>
                 <div class="row-main">
                   <div class="row-title">${escapeHTML(p.title)}</div>
+                  <div class="row-mobile-meta">
+                    <span>${escapeHTML(p.author)}</span>
+                    <span>·</span>
+                    <span>${escapeHTML(p.cat)}</span>
+                    <span>·</span>
+                    <span>${escapeHTML(p.date)}</span>
+                  </div>
                   <div class="row-tags">
                     ${(p.tags || []).slice(0, 3).map((t) => `<span class="row-tag">#${escapeHTML(t)}</span>`).join("")}
                   </div>
@@ -4089,8 +4592,10 @@ tailscale serve https / http://localhost:8765
             const vx = fpTargetX - fpX;
             fpX += vx * 0.16;
             fpY += (fpTargetY - fpY) * 0.16;
-            const rot = Math.max(-7, Math.min(7, vx * 0.12));
-            floatingPreview.style.transform = `translate3d(${fpX + 24}px, ${fpY - 90}px, 0) rotate(${rot.toFixed(2)}deg)`;
+            const rot = Math.max(-6, Math.min(6, vx * 0.1));
+            const left = Math.max(16, Math.min(window.innerWidth - 304, fpX + 36));
+            const top = Math.max(76, Math.min(window.innerHeight - 238, fpY - 88));
+            floatingPreview.style.transform = `translate3d(${left}px, ${top}px, 0) rotate(${rot.toFixed(2)}deg)`;
           }
           requestAnimationFrame(animateFloatingPreview);
         }
@@ -4232,9 +4737,9 @@ tailscale serve https / http://localhost:8765
                 const dx = x - pointer.x;
                 const dy = baseY + waveY - pointer.y;
                 const dist = Math.hypot(dx, dy);
-                if (dist < 140) {
-                  const force = (1 - dist / 140);
-                  node.vy += (pointer.vy * 0.25 + (dy > 0 ? 1.1 : -1.1)) * force;
+                if (dist < 170) {
+                  const force = (1 - dist / 170);
+                  node.vy += (pointer.vy * 0.34 + (dy > 0 ? 1.55 : -1.55)) * force;
                 }
               }
 
@@ -4242,8 +4747,8 @@ tailscale serve https / http://localhost:8765
               for (let k = 0; k < ripples.length; k++) {
                 const rp = ripples[k];
                 const d = Math.hypot(x - rp.x, baseY - rp.y);
-                if (Math.abs(d - rp.radius) < 38) {
-                  node.vy += Math.sin((d - rp.radius) * 0.15) * 4.5 * rp.strength;
+                if (Math.abs(d - rp.radius) < 48) {
+                  node.vy += Math.sin((d - rp.radius) * 0.14) * 6.4 * rp.strength;
                 }
               }
 
@@ -4259,11 +4764,21 @@ tailscale serve https / http://localhost:8765
 
             const accent = l % 9 === 0;
             wCtx.strokeStyle = accent
-              ? "rgba(255, 30, 66, 0.38)"
+              ? "rgba(255, 30, 66, 0.68)"
               : l % 4 === 0
-                ? "rgba(107, 229, 255, 0.22)"
-                : "rgba(242, 244, 248, 0.11)";
-            wCtx.lineWidth = accent ? 1.4 : 1;
+                ? "rgba(107, 229, 255, 0.44)"
+                : "rgba(242, 244, 248, 0.24)";
+            wCtx.lineWidth = accent ? 1.6 : 1.05;
+            wCtx.stroke();
+          }
+
+          /* Visible glowing shockwave rings on click */
+          for (let k = 0; k < ripples.length; k++) {
+            const rp = ripples[k];
+            wCtx.beginPath();
+            wCtx.arc(rp.x, rp.y, rp.radius, 0, Math.PI * 2);
+            wCtx.strokeStyle = `rgba(255, 30, 66, ${(rp.strength * 0.72).toFixed(2)})`;
+            wCtx.lineWidth = 1.8;
             wCtx.stroke();
           }
 
@@ -4466,6 +4981,14 @@ tailscale serve https / http://localhost:8765
         if (idx === -1) return;
         const post = state.posts[idx];
         state.openPostId = postId;
+        resetCursorLabel();
+        if (floatingPreview) {
+          fpActive = false;
+          floatingPreview.classList.remove("is-visible");
+        }
+        try {
+          history.replaceState(null, "", `#post=${encodeURIComponent(postId)}`);
+        } catch { /* ignore */ }
 
         document.getElementById("reader-topbar-meta").textContent = `${post.cat} · ${post.author} · ${post.date}`;
         document.getElementById("reader-hero-art").innerHTML = generatePostCoverSVG(post);
@@ -4520,17 +5043,54 @@ tailscale serve https / http://localhost:8765
         playTone(440, 0.08, "triangle", 0.025);
       }
 
+      const cmdModal = document.getElementById("cmd-modal");
+      const cmdInput = document.getElementById("cmd-input");
+      const cmdList = document.getElementById("cmd-list");
+      let cmdItems = [];
+      let cmdSelectedIdx = 0;
+
       function closeOverlays() {
+        const hadPost = Boolean(state.openPostId);
         readerDrawer.classList.remove("is-open");
         composerModal.classList.remove("is-open");
+        cmdModal?.classList.remove("is-open");
         backdrop.classList.remove("is-open");
         document.body.style.overflow = "";
         state.openPostId = null;
-        if (ringEl) {
-          ringEl.textContent = "";
-          ringEl.classList.remove("is-labeled");
+        resetCursorLabel();
+        if (hadPost && window.location.hash.startsWith("#post=")) {
+          try {
+            history.replaceState(null, "", window.location.pathname + window.location.search);
+          } catch { /* ignore */ }
         }
       }
+
+      document.getElementById("reader-share")?.addEventListener("click", async (e) => {
+        if (!state.openPostId) return;
+        const btn = e.currentTarget;
+        const url = `${window.location.origin}${window.location.pathname}#post=${encodeURIComponent(state.openPostId)}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          btn.textContent = "LINK COPIED ✓";
+        } catch {
+          btn.textContent = `#post=${state.openPostId}`;
+        }
+        setTimeout(() => (btn.textContent = "SHARE ↗"), 1600);
+      });
+
+      document.getElementById("reader-export-json")?.addEventListener("click", async (e) => {
+        if (!state.openPostId) return;
+        const post = state.posts.find((p) => p.id === state.openPostId);
+        if (!post) return;
+        const btn = e.currentTarget;
+        try {
+          await navigator.clipboard.writeText(JSON.stringify(post, null, 2));
+          btn.textContent = "JSON COPIED ✓";
+        } catch {
+          btn.textContent = "READY";
+        }
+        setTimeout(() => (btn.textContent = "JSON"), 1600);
+      });
 
       readerScroll?.addEventListener("scroll", () => {
         const max = readerScroll.scrollHeight - readerScroll.clientHeight;
@@ -4540,8 +5100,144 @@ tailscale serve https / http://localhost:8765
 
       document.getElementById("reader-close")?.addEventListener("click", closeOverlays);
       backdrop?.addEventListener("click", closeOverlays);
+      [composerModal, cmdModal].forEach((m) => {
+        m?.addEventListener("click", (e) => {
+          if (e.target === m) closeOverlays();
+        });
+      });
+
+      /* Command Palette (⌘K / Ctrl+K) */
+      function buildCmdCatalog() {
+        const list = [];
+        state.posts.forEach((p) => {
+          list.push({
+            title: p.title,
+            sub: `${p.author} · ${p.date} · ${(p.tags || []).slice(0, 2).join(" ")}`,
+            badge: p.cat,
+            run: () => openReader(p.id)
+          });
+        });
+        Object.values(TOTEMS).forEach((t) => {
+          list.push({
+            title: `Morph Totem → ${t.code} (${t.cn})`,
+            sub: `01 // COLLECTIVE TOTEM · ${t.cat}`,
+            badge: "TOTEM",
+            run: () => {
+              applyTotem(t.key);
+              document.getElementById("totem")?.scrollIntoView({ behavior: "smooth" });
+            }
+          });
+        });
+        CREW.forEach((m) => {
+          list.push({
+            title: `Filter Crew → ${m.name}`,
+            sub: m.role,
+            badge: "CREW",
+            run: () => {
+              state.filterAuthor = m.name;
+              setCategoryFilter("ALL");
+              document.getElementById("chronicles")?.scrollIntoView({ behavior: "smooth" });
+            }
+          });
+        });
+        list.push({
+          title: "New Post / 发布新文章 (+ 投稿)",
+          sub: "Open live post composer modal",
+          badge: "ACTION",
+          run: () => {
+            backdrop.classList.add("is-open");
+            composerModal.classList.add("is-open");
+            document.body.style.overflow = "hidden";
+          }
+        });
+        list.push({
+          title: state.soundOn ? "Mute Web Audio Synth (SOUND: OFF)" : "Enable Web Audio Synth (SOUND: ON)",
+          sub: "Toggle interactive oscillator sound effects",
+          badge: "AUDIO",
+          run: () => document.getElementById("sound-toggle")?.click()
+        });
+        return list;
+      }
+
+      function renderCmdList() {
+        if (!cmdList) return;
+        const q = (cmdInput?.value || "").trim().toLowerCase();
+        const catalog = buildCmdCatalog();
+        cmdItems = q
+          ? catalog.filter((it) => `${it.title} ${it.sub} ${it.badge}`.toLowerCase().includes(q))
+          : catalog;
+        if (cmdSelectedIdx >= cmdItems.length) cmdSelectedIdx = Math.max(0, cmdItems.length - 1);
+
+        if (cmdItems.length === 0) {
+          cmdList.innerHTML = `<div style="padding:20px;text-align:center;font-family:var(--font-mono);font-size:12px;color:var(--ink-muted);">NO MATCHING COMMAND OR POST</div>`;
+          return;
+        }
+        cmdList.innerHTML = cmdItems.map((it, idx) => `
+          <button type="button" class="cmd-item ${idx === cmdSelectedIdx ? "is-selected" : ""}" data-cmd-idx="${idx}">
+            <div class="cmd-item-main">
+              <span class="cmd-item-title">${escapeHTML(it.title)}</span>
+              <span class="cmd-item-sub">${escapeHTML(it.sub)}</span>
+            </div>
+            <span class="cmd-item-badge">${escapeHTML(it.badge)}</span>
+          </button>
+        `).join("");
+
+        cmdList.querySelectorAll("[data-cmd-idx]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const idx = Number(btn.dataset.cmdIdx);
+            const chosen = cmdItems[idx];
+            closeOverlays();
+            chosen?.run();
+          });
+        });
+      }
+
+      function openCmdPalette() {
+        closeOverlays();
+        resetCursorLabel();
+        if (cmdInput) cmdInput.value = "";
+        cmdSelectedIdx = 0;
+        renderCmdList();
+        backdrop.classList.add("is-open");
+        cmdModal?.classList.add("is-open");
+        document.body.style.overflow = "hidden";
+        setTimeout(() => cmdInput?.focus(), 40);
+      }
+
+      document.getElementById("open-cmd-btn")?.addEventListener("click", openCmdPalette);
+      document.getElementById("cmd-close")?.addEventListener("click", closeOverlays);
+      cmdInput?.addEventListener("input", () => {
+        cmdSelectedIdx = 0;
+        renderCmdList();
+      });
+
       document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") closeOverlays();
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          if (cmdModal?.classList.contains("is-open")) closeOverlays();
+          else openCmdPalette();
+          return;
+        }
+        if (e.key === "Escape") {
+          closeOverlays();
+          return;
+        }
+        if (cmdModal?.classList.contains("is-open")) {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            cmdSelectedIdx = Math.min(cmdItems.length - 1, cmdSelectedIdx + 1);
+            renderCmdList();
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            cmdSelectedIdx = Math.max(0, cmdSelectedIdx - 1);
+            renderCmdList();
+          } else if (e.key === "Enter" && cmdItems[cmdSelectedIdx]) {
+            e.preventDefault();
+            const chosen = cmdItems[cmdSelectedIdx];
+            closeOverlays();
+            chosen.run();
+          }
+        }
       });
 
       /* Resonance Like + Particle Burst */
@@ -4691,6 +5387,7 @@ tailscale serve https / http://localhost:8765
       const sections = Array.from(document.querySelectorAll("main > section"));
       const railDots = Array.from(document.querySelectorAll(".rail-dot"));
       const navLinks = Array.from(document.querySelectorAll(".nav-link"));
+      const dockLinks = Array.from(document.querySelectorAll(".dock-link"));
 
       railDots.forEach((dot) => {
         dot.addEventListener("click", () => {
@@ -4726,6 +5423,7 @@ tailscale serve https / http://localhost:8765
         }
         railDots.forEach((d) => d.classList.toggle("is-active", d.dataset.jump === `#${currentId}`));
         navLinks.forEach((l) => l.classList.toggle("is-active", l.dataset.section === currentId));
+        dockLinks.forEach((d) => d.classList.toggle("is-active", d.dataset.section === currentId));
       }
 
       window.addEventListener("scroll", onScroll, { passive: true });
@@ -4747,6 +5445,12 @@ tailscale serve https / http://localhost:8765
       renderChronicles();
       renderSignals();
       renderCrew();
+
+      /* Auto-open deep-linked article if URL contains #post=<id> */
+      if (window.location.hash.startsWith("#post=")) {
+        const linkedId = decodeURIComponent(window.location.hash.slice(6));
+        setTimeout(() => openReader(linkedId), 260);
+      }
 
       /* Non-blocking Typography Upgrade (never delays initial load) */
       window.addEventListener("load", () => {
