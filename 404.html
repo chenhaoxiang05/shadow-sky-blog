@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 // SIGNAL LOST — SHADOWSKY</title>
+  <style>
+    :root {
+      --bg-void: #07070a;
+      --ink-light: #f2f4f8;
+      --ink-muted: #8b92a5;
+      --crimson: #ff1e42;
+      --cyan: #6be5ff;
+      --font-display: "Syne", "Space Grotesk", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-void);
+      color: var(--ink-light);
+      font-family: var(--font-display);
+      overflow: hidden;
+    }
+
+    .film-grain {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.04;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .shell {
+      position: relative;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(255, 30, 66, 0.14) 0%, rgba(107, 229, 255, 0.05) 36%, transparent 68%);
+    }
+
+    .telemetry {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      color: var(--cyan);
+      margin-bottom: 24px;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--crimson);
+      box-shadow: 0 0 12px var(--crimson);
+    }
+
+    .glitch {
+      position: relative;
+      font-size: clamp(3.2rem, 11vw, 7.6rem);
+      font-weight: 800;
+      line-height: 0.94;
+      letter-spacing: -0.04em;
+      color: var(--ink-light);
+      text-shadow: -2px 0 var(--crimson), 2px 0 var(--cyan);
+      margin-bottom: 16px;
+      animation: jitter 3.8s infinite;
+    }
+
+    @keyframes jitter {
+      0%, 92%, 100% { transform: translate(0, 0); text-shadow: -2px 0 var(--crimson), 2px 0 var(--cyan); }
+      94% { transform: translate(-2px, 1px); text-shadow: 3px 0 var(--crimson), -3px 0 var(--cyan); }
+      96% { transform: translate(2px, -1px); text-shadow: -3px 0 var(--crimson), 2px 0 var(--cyan); }
+    }
+
+    .sub {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: var(--crimson);
+      margin-bottom: 14px;
+    }
+
+    .desc {
+      max-width: 480px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--ink-muted);
+      margin-bottom: 32px;
+      font-family: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    .home-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 26px;
+      border-radius: 999px;
+      background: var(--crimson);
+      color: #ffffff;
+      text-decoration: none;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      box-shadow: 0 8px 30px rgba(255, 30, 66, 0.35);
+      transition: transform 0.25s ease, background-color 0.25s ease;
+    }
+
+    .home-btn:hover {
+      background: #ff3557;
+      transform: translateY(-2px);
+    }
+
+    .path-note {
+      margin-top: 28px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: rgba(139, 146, 165, 0.65);
+      letter-spacing: 0.08em;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="film-grain" aria-hidden="true"></div>
+  <main class="shell">
+    <div class="telemetry">
+      <span class="dot"></span>
+      <span>SHADOWSKY // TELEMETRY ERR_404</span>
+    </div>
+    <h1 class="glitch">404</h1>
+    <div class="sub">SIGNAL LOST IN STRATOSPHERE</div>
+    <p class="desc">
+      当前坐标没有可打捞的群聊信号或档案文章。可能是链接已迁徙，或这页还只存在于凌晨三点的草稿里。
+    </p>
+    <a class="home-btn" id="return-home" href="./">
+      <span>返回主页 / RETURN TO SHADOWSKY</span>
+      <span>↗</span>
+    </a>
+    <div class="path-note" id="lost-path"></div>
+  </main>
+
+  <script>
+    (() => {
+      const link = document.getElementById("return-home");
+      const pathEl = document.getElementById("lost-path");
+      const p = window.location.pathname || "/";
+      if (p.startsWith("/shadow-sky-blog")) {
+        link.setAttribute("href", "/shadow-sky-blog/");
+      } else {
+        link.setAttribute("href", "/");
+      }
+      if (pathEl) {
+        pathEl.textContent = "MISSING ROUTE: " + p;
+      }
+    })();
+  </script>
+</body>
+</html>
